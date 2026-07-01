@@ -10,5 +10,4 @@ I have no prior coding experienece so this entire project is vibe coded (I'm sur
 
 Here are my socials and my video showcasing it:
 https://linktr.ee/Meatymelo
-
-
+https://www.tiktok.com/@meatymelo/video/7657354279371541791
