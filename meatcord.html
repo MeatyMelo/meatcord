@@ -1,0 +1,4408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meatcord — Recorder</title>
+<style>
+  /* ============================================================
+     DESIGN SYSTEM
+     Dark recording-deck aesthetic. Crimson is the one bold accent
+     (reserved for the record action). Everything else is greyscale
+     and quiet. Monospace numerics = camcorder "readout" feel.
+     ============================================================ */
+  :root{
+    --bg:        #0b0b0d;
+    --surface:   #141417;
+    --surface-2: #1c1c21;
+    --surface-3: #25252c;
+    --line:      #2c2c34;
+    --line-soft: #222228;
+    --text:      #f1f1f4;
+    --text-dim:  #9a9aa6;
+    --text-faint:#63636e;
+    --rec:       #ff3b47;
+    --rec-deep:  #c41e2a;
+    --rec-glow:  rgba(255,59,71,.35);
+    --ok:        #3ddc84;
+    --warn:      #f5b13d;
+    --radius:    10px;
+    --radius-sm: 7px;
+    --mono: ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:14px; line-height:1.4;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  button{font-family:inherit;color:inherit}
+  input,select{font-family:inherit}
+
+  /* ---- App shell: topbar / main / controls / timeline ---- */
+  .app{display:grid; grid-template-rows:auto 1fr auto auto; height:100vh; height:100dvh}
+
+  .topbar{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:10px 14px; background:var(--surface);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{
+    font-family:var(--mono); font-weight:700; font-size:15px; letter-spacing:.5px;
+    color:var(--text); display:flex; align-items:center; gap:8px; user-select:none;
+  }
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec-glow)}
+  .tb-group{display:flex; align-items:center; gap:4px}
+  .tb-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--text-faint);margin-right:2px}
+  .tb-sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  .spacer{flex:1}
+
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:2px;gap:2px}
+  .seg button{
+    background:transparent;border:0;border-radius:5px;padding:5px 11px;font-size:12.5px;
+    color:var(--text-dim);cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;
+  }
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+
+  /* ---- Main: stage + side panel ---- */
+  .main{display:flex; min-height:0; overflow:hidden}
+  .stage{
+    flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 35%, #161619 0%, #0a0a0c 75%);
+    padding:14px; position:relative; overflow:hidden;
+  }
+  .stage-canvas{
+    max-width:100%; max-height:100%; background:#000;
+    border-radius:var(--radius); box-shadow:0 10px 40px rgba(0,0,0,.55), 0 0 0 1px var(--line);
+    touch-action:none; cursor:grab;
+  }
+  .stage-canvas.dragging{cursor:grabbing}
+  .stage-empty{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--text-faint); font-size:13px; pointer-events:none; text-align:center; padding:24px;
+  }
+
+  /* live recording overlay (DOM, never drawn to canvas so it's not recorded) */
+  .rec-hud{
+    position:absolute; top:24px; left:50%; transform:translateX(-50%);
+    display:none; align-items:center; gap:8px; padding:6px 12px;
+    background:rgba(10,10,12,.7); backdrop-filter:blur(6px);
+    border:1px solid var(--rec-deep); border-radius:99px; font-family:var(--mono); font-size:13px;
+  }
+  .rec-hud.live{display:flex}
+  .rec-hud .blink{width:9px;height:9px;border-radius:50%;background:var(--rec);animation:blink 1s steps(2,start) infinite}
+  @keyframes blink{50%{opacity:.15}}
+
+  .warn-pill{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    display:none; padding:6px 12px; background:rgba(245,177,61,.12);
+    border:1px solid rgba(245,177,61,.4); color:var(--warn); border-radius:99px; font-size:12px;
+  }
+  .warn-pill.show{display:block}
+
+  /* ---- Side panel ---- */
+  .side{
+    width:300px; flex:none; background:var(--surface); border-left:1px solid var(--line);
+    overflow-y:auto; overscroll-behavior:contain;
+  }
+  .side::-webkit-scrollbar{width:10px}
+  .side::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:99px;border:3px solid var(--surface)}
+
+  .panel{border-bottom:1px solid var(--line-soft)}
+  .panel-h{
+    display:flex;align-items:center;justify-content:space-between;width:100%;
+    padding:11px 14px; background:transparent; border:0; cursor:pointer;
+    font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim);
+  }
+  .panel-h:hover{color:var(--text)}
+  .panel-h .chev{transition:transform .15s; color:var(--text-faint)}
+  .panel.collapsed .chev{transform:rotate(-90deg)}
+  .panel-body{padding:4px 14px 16px}
+  .panel.collapsed .panel-body{display:none}
+
+  .field{margin:11px 0}
+  .field:first-child{margin-top:6px}
+  .field label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text-dim);margin-bottom:6px}
+  .field label .val{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:99px;
+    background:var(--surface-3);outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--text);border:2px solid var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.5);cursor:grab;
+  }
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--text);border:2px solid var(--bg);cursor:grab}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--rec-glow)}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:8px 12px;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:var(--radius-sm);color:var(--text);font-size:12.5px;cursor:pointer;
+    transition:background .12s,border-color .12s; width:100%;
+  }
+  .btn:hover{background:var(--surface-3)}
+  .btn.on{border-color:var(--rec-deep);color:#fff;background:rgba(196,30,42,.18)}
+  .btn-row{display:flex;gap:6px}
+  .btn-row .btn{width:auto;flex:1}
+
+  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .chip{
+    padding:6px 0;text-align:center;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:6px;font-size:12px;color:var(--text-dim);cursor:pointer;font-family:var(--mono);
+  }
+  .chip:hover{color:var(--text)}
+  .chip.on{background:var(--surface-3);color:var(--text);border-color:var(--text-faint)}
+
+  .drop{
+    border:1.5px dashed var(--line);border-radius:var(--radius);padding:18px 12px;text-align:center;
+    color:var(--text-faint);font-size:12.5px;cursor:pointer;transition:border-color .15s,color .15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--rec-deep);color:var(--text-dim)}
+
+  .media-info{font-size:11.5px;color:var(--text-faint);margin-top:8px;font-family:var(--mono);word-break:break-all}
+
+  .scrub{position:relative;height:34px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;margin-top:8px;cursor:pointer;overflow:hidden}
+  .scrub-film{position:absolute;inset:0;display:flex}
+  .scrub-film img{height:100%;width:auto;object-fit:cover;opacity:.5;pointer-events:none}
+  .scrub-play{position:absolute;top:0;bottom:0;width:2px;background:var(--rec);box-shadow:0 0 6px var(--rec-glow);left:0}
+
+  /* ---- Controls bar ---- */
+  .controls{
+    display:flex;align-items:center;justify-content:center;gap:18px;
+    padding:12px;background:var(--surface);border-top:1px solid var(--line);position:relative;
+  }
+  .ctrl-btn{
+    width:46px;height:46px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);
+    transition:background .12s,color .12s,border-color .12s;
+  }
+  .ctrl-btn:hover{background:var(--surface-3);color:var(--text)}
+  .ctrl-btn:disabled{opacity:.35;cursor:not-allowed}
+  .ctrl-btn.muted{color:var(--rec);border-color:var(--rec-deep)}
+  .ctrl-btn svg{width:20px;height:20px}
+
+  .rec-btn{
+    width:66px;height:66px;border-radius:50%;background:transparent;
+    border:3px solid var(--rec);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;padding:0;transition:transform .1s;
+  }
+  .rec-btn:hover{transform:scale(1.04)}
+  .rec-btn:active{transform:scale(.96)}
+  .rec-btn .core{width:42px;height:42px;border-radius:50%;background:var(--rec);transition:all .18s cubic-bezier(.4,0,.2,1)}
+  .rec-btn.recording{animation:recpulse 1.4s ease-in-out infinite}
+  .rec-btn.recording .core{width:22px;height:22px;border-radius:6px}
+  @keyframes recpulse{0%,100%{box-shadow:0 0 0 0 var(--rec-glow)}50%{box-shadow:0 0 0 10px transparent}}
+
+  .timer{position:absolute;left:18px;font-family:var(--mono);font-size:15px;color:var(--text-dim);letter-spacing:1px}
+  .edit-launch{position:absolute;right:18px}
+
+  /* ---- Timeline ---- */
+  .timeline{
+    display:flex;align-items:center;gap:6px;min-height:46px;padding:8px 14px;
+    background:var(--bg);border-top:1px solid var(--line);overflow-x:auto;
+  }
+  .timeline::-webkit-scrollbar{height:8px}
+  .timeline::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:99px}
+  .tl-empty{color:var(--text-faint);font-size:12px;padding:6px}
+  .pill{
+    position:relative;height:30px;min-width:34px;border-radius:6px;
+    background:linear-gradient(180deg,var(--surface-3),var(--surface-2));
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    color:var(--text-dim);font-size:11px;font-family:var(--mono);flex:none;cursor:default;
+    overflow:hidden;
+  }
+  .pill .num{position:relative;z-index:1}
+  .pill .reorder{position:absolute;inset:0;display:none;align-items:center;justify-content:space-between;padding:0 2px;z-index:2}
+  .pill:hover .reorder{display:flex}
+  .pill:hover .num{opacity:.25}
+  .pill .reorder button{background:rgba(10,10,12,.6);border:0;color:var(--text);width:14px;height:100%;cursor:pointer;font-size:11px;border-radius:3px}
+  .pill .reorder button:hover{background:var(--rec-deep)}
+  .pill .reorder button:disabled{opacity:.25;cursor:default}
+  .pill .tip{
+    position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+    background:var(--surface-3);border:1px solid var(--line);padding:3px 7px;border-radius:5px;
+    font-size:10.5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5;
+  }
+  .pill:hover .tip{opacity:1}
+
+  /* ============================================================
+     EDITOR OVERLAY (separate "app")
+     ============================================================ */
+  .editor{
+    position:fixed;inset:0;background:var(--bg);z-index:50;display:none;
+    grid-template-rows:auto 1fr auto auto auto;
+  }
+  .editor.open{display:grid}
+  .ed-top{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .ed-top h2{margin:0;font-size:14px;font-weight:600;letter-spacing:.3px}
+  .ed-stage{display:flex;align-items:center;justify-content:center;background:#000;min-height:0;padding:14px;position:relative}
+  .ed-stage video{max-width:100%;max-height:100%;border-radius:var(--radius);background:#000}
+  .ed-stage .ed-cv{max-width:100%;max-height:100%;border-radius:var(--radius);background:#000;object-fit:contain}
+
+  .ed-scrub-wrap{padding:10px 16px;background:var(--surface)}
+  .ed-scrub{position:relative;height:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:99px;cursor:pointer}
+  .ed-scrub-fill{position:absolute;top:0;left:0;bottom:0;background:var(--rec-deep);border-radius:99px;width:0}
+  .ed-scrub-marks{position:absolute;inset:0}
+  .ed-scrub-mark{position:absolute;top:0;bottom:0;width:1px;background:var(--bg)}
+  .ed-scrub-play{position:absolute;top:-3px;width:6px;height:20px;border-radius:3px;background:var(--text);transform:translateX(-50%);box-shadow:0 0 6px rgba(0,0,0,.6)}
+
+  .ed-clip{padding:10px 16px;background:var(--surface);border-top:1px solid var(--line-soft)}
+  .ed-clip-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+  .ed-clip-head .who{font-size:13px;color:var(--text-dim)}
+  .ed-clip-head .who b{color:var(--text);font-family:var(--mono)}
+  .ed-clip-head .range{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+  .ed-btn{padding:6px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;color:var(--text-dim);font-size:12px;cursor:pointer}
+  .ed-btn:hover{background:var(--surface-3);color:var(--text)}
+  .ed-btn:disabled{opacity:.3;cursor:not-allowed}
+  .ed-btn.danger:hover{background:rgba(196,30,42,.22);border-color:var(--rec-deep);color:#fff}
+
+  .trim{position:relative;height:64px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none}
+  .trim-wave{position:absolute;inset:0;width:100%;height:100%}
+  .trim-dim{position:absolute;top:0;bottom:0;background:rgba(8,8,10,.72);pointer-events:none}
+  .trim-handle{position:absolute;top:0;bottom:0;width:14px;background:var(--rec);cursor:ew-resize;display:flex;align-items:center;justify-content:center;z-index:3}
+  .trim-handle::after{content:"";width:2px;height:46%;background:rgba(0,0,0,.55);border-radius:2px}
+  .trim-handle.l{border-radius:6px 0 0 6px}
+  .trim-handle.r{border-radius:0 6px 6px 0}
+  .trim-play{position:absolute;top:0;bottom:0;width:2px;background:#fff;z-index:2;pointer-events:none;box-shadow:0 0 4px rgba(0,0,0,.7)}
+
+  .speed-row{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
+  .speed-row .chip{flex:1;min-width:42px}
+
+  .ed-transport{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px;background:var(--surface);border-top:1px solid var(--line)}
+  .ed-transport .tcount{position:absolute;left:16px;font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+  .ed-transport-inner{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:14px}
+  .t-btn{width:40px;height:40px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line);color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .t-btn:hover{background:var(--surface-3);color:var(--text)}
+  .t-btn.play{width:52px;height:52px;border-color:var(--text-faint)}
+  .t-btn svg{width:18px;height:18px}
+  .t-vol{position:absolute;right:16px;display:flex;align-items:center;gap:6px;width:120px}
+
+  /* ---- toast / status ---- */
+  .toast{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--surface-3);border:1px solid var(--line);padding:10px 16px;border-radius:8px;
+    font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:100;max-width:90vw;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:var(--rec-deep);background:rgba(196,30,42,.2)}
+
+  /* ---- export modal ---- */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:80;display:none;align-items:center;justify-content:center}
+  .modal.open{display:flex}
+  .modal-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;width:min(420px,92vw)}
+  .modal-card h3{margin:0 0 4px;font-size:16px}
+  .modal-card p{margin:0 0 16px;color:var(--text-dim);font-size:13px}
+  .prog{height:8px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin:14px 0}
+  .prog-bar{height:100%;width:0;background:var(--rec);transition:width .2s}
+
+  :focus-visible{outline:2px solid var(--rec);outline-offset:2px;border-radius:4px}
+  @media (prefers-reduced-motion:reduce){
+    .rec-btn.recording{animation:none}
+    .rec-hud .blink{animation:none}
+    *{transition:none !important}
+  }
+  @media (max-width:760px){
+    .main{flex-direction:column}
+    .side{width:100%;max-height:42vh;border-left:0;border-top:1px solid var(--line)}
+    .topbar{gap:8px}
+  }
+</style>
+</head>
+<body>
+
+<!-- hidden sharpen convolution filter (CSS filter has no native sharpen) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="mc-sharpen"><feConvolveMatrix id="mc-sharpen-k" order="3" preserveAlpha="true"
+    kernelMatrix="0 0 0 0 1 0 0 0 0"/></filter>
+</svg>
+
+<div class="app" id="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span>MEATCORD</div>
+    <div class="tb-sep"></div>
+
+    <div class="tb-group">
+      <span class="tb-label">Mode</span>
+      <div class="seg" id="mode-seg">
+        <button data-mode="normal" class="on">Normal</button>
+        <button data-mode="split">Split</button>
+        <button data-mode="pip">PiP</button>
+      </div>
+    </div>
+
+    <div class="tb-group">
+      <span class="tb-label">Frame</span>
+      <div class="seg" id="ar-seg">
+        <button data-ar="9:16" class="on">9:16</button>
+        <button data-ar="16:9">16:9</button>
+        <button data-ar="1:1">1:1</button>
+        <button data-ar="4:3">4:3</button>
+      </div>
+    </div>
+
+    <div class="tb-group">
+      <span class="tb-label">Quality</span>
+      <div class="seg" id="res-seg">
+        <button data-res="720p">720p</button>
+        <button data-res="1080p" class="on">1080p</button>
+        <button data-res="1440p">1440p</button>
+        <button data-res="4K">4K</button>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="brand" style="font-size:11px;color:var(--text-faint)" id="actual-res">—</div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas class="stage-canvas" id="canvas"></canvas>
+      <div class="stage-empty" id="stage-empty">Allow camera access to begin. Import media for Split &amp; PiP modes.</div>
+      <div class="rec-hud" id="rec-hud"><span class="blink"></span><span id="rec-hud-time">0:00</span></div>
+      <div class="warn-pill" id="warn-pill"></div>
+    </div>
+
+    <!-- SIDE PANEL -->
+    <aside class="side" id="side">
+
+      <section class="panel" data-panel>
+        <button class="panel-h">Camera <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <div class="btn-row">
+              <button class="btn" id="fit-cover">Fill</button>
+              <button class="btn on" id="fit-contain">Fit</button>
+              <button class="btn" id="mirror-btn">Mirror</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Zoom <span class="val" id="zoom-val">1.00×</span></label>
+            <input type="range" id="zoom" min="30" max="300" value="100">
+          </div>
+          <div class="field" style="color:var(--text-faint);font-size:11.5px">Drag on the preview to pan the camera.</div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel>
+        <button class="panel-h">Import media <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="drop" id="drop">Drop image or video<br>or click to choose</div>
+          <input type="file" id="file" accept="image/*,video/*" hidden>
+          <div class="media-info" id="media-info"></div>
+          <div id="video-tools" style="display:none">
+            <div class="scrub" id="scrub">
+              <div class="scrub-film" id="scrub-film"></div>
+              <div class="scrub-play" id="scrub-play"></div>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn" id="imp-play">Play preview</button>
+              <button class="btn" id="imp-clear">Remove</button>
+            </div>
+            <div class="field">
+              <label>Imported audio <span class="val" id="impvol-val">100%</span></label>
+              <input type="range" id="impvol" min="0" max="150" value="100">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel collapsed" data-panel id="pip-panel" style="display:none">
+        <button class="panel-h">PiP layout <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <label>Size <span class="val" id="pipsize-val">30%</span></label>
+            <input type="range" id="pipsize" min="10" max="65" value="30">
+          </div>
+          <div class="field">
+            <label>Corner radius <span class="val" id="piprad-val">12%</span></label>
+            <input type="range" id="piprad" min="0" max="50" value="12">
+          </div>
+          <div class="field">
+            <label>Snap to corner</label>
+            <div class="chips" id="pip-snap">
+              <button class="chip" data-snap="tl">TL</button>
+              <button class="chip" data-snap="tr">TR</button>
+              <button class="chip" data-snap="bl">BL</button>
+              <button class="chip" data-snap="br">BR</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Aspect ratio</label>
+            <div class="chips" id="pip-ar" style="grid-template-columns:repeat(5,1fr)">
+              <button class="chip on" data-par="auto">Auto</button>
+              <button class="chip" data-par="16:9">16:9</button>
+              <button class="chip" data-par="9:16">9:16</button>
+              <button class="chip" data-par="1:1">1:1</button>
+              <button class="chip" data-par="4:3">4:3</button>
+            </div>
+          </div>
+          <div class="field" style="color:var(--text-faint);font-size:11.5px">Drag the PiP box to move it. Drag its bottom-right corner to resize.</div>
+        </div>
+      </section>
+
+      <section class="panel collapsed" data-panel>
+        <button class="panel-h">Filters <span class="chev">▾</span></button>
+        <div class="panel-body" id="filters">
+          <div class="field"><label>Brightness <span class="val" data-fval="brightness">0</span></label><input type="range" data-filter="brightness" min="50" max="150" value="100"></div>
+          <div class="field"><label>Contrast <span class="val" data-fval="contrast">0</span></label><input type="range" data-filter="contrast" min="50" max="150" value="100"></div>
+          <div class="field"><label>Saturation <span class="val" data-fval="saturate">0</span></label><input type="range" data-filter="saturate" min="0" max="200" value="100"></div>
+          <div class="field"><label>Hue <span class="val" data-fval="hue">0°</span></label><input type="range" data-filter="hue" min="-180" max="180" value="0"></div>
+          <div class="field"><label>Temperature <span class="val" data-fval="temp">0</span></label><input type="range" data-filter="temp" min="-100" max="100" value="0"></div>
+          <div class="field"><label>Exposure <span class="val" data-fval="exposure">0</span></label><input type="range" data-filter="exposure" min="-50" max="50" value="0"></div>
+          <div class="field"><label>Blur <span class="val" data-fval="blur">0</span></label><input type="range" data-filter="blur" min="0" max="20" value="0"></div>
+          <div class="field"><label>Sharpen <span class="val" data-fval="sharpen">0</span></label><input type="range" data-filter="sharpen" min="0" max="100" value="0"></div>
+          <button class="btn" id="filters-reset">Reset filters</button>
+        </div>
+      </section>
+
+      <section class="panel" data-panel>
+        <button class="panel-h">Audio <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <label>Microphone <span class="val" id="micvol-val">100%</span></label>
+            <input type="range" id="micvol" min="0" max="150" value="100" title="Affects Split/PiP recordings. Normal mode records the camera mic directly for perfect A/V sync — set its level in post.">
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel>
+        <button class="panel-h">Export <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <label>Resolution</label>
+            <div class="chips" id="exp-res">
+              <button class="chip" data-eres="720p">720p</button>
+              <button class="chip on" data-eres="1080p">1080p</button>
+              <button class="chip" data-eres="1440p">1440p</button>
+              <button class="chip" data-eres="4K">4K</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Bitrate <span class="val" id="exp-br-hint">higher = sharper, bigger file</span></label>
+            <div class="chips" id="exp-bitrate">
+              <button class="chip" data-ebr="8">8M</button>
+              <button class="chip on" data-ebr="16">16M</button>
+              <button class="chip" data-ebr="24">24M</button>
+              <button class="chip" data-ebr="40">40M</button>
+            </div>
+          </div>
+          <button class="btn" id="export-btn" style="border-color:var(--rec-deep)">Export all clips</button>
+          <div class="media-info" id="export-note"></div>
+        </div>
+      </section>
+
+    </aside>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="timer mono" id="timer">0:00</div>
+    <button class="ctrl-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled aria-label="Undo last clip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
+    </button>
+    <button class="ctrl-btn" id="mic-btn" title="Mute mic (M)" aria-label="Mute microphone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <button class="rec-btn" id="rec-btn" title="Record (Space)" aria-label="Start recording"><span class="core"></span></button>
+    <button class="ctrl-btn" id="edit-btn" title="Edit clips (P)" disabled aria-label="Edit clips">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    </button>
+    <button class="btn edit-launch" id="edit-launch" style="width:auto;display:none">Edit &amp; preview →</button>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="timeline" id="timeline"><span class="tl-empty">No clips yet — hit record.</span></div>
+</div>
+
+<!-- ============ EDITOR OVERLAY ============ -->
+<div class="editor" id="editor">
+  <div class="ed-top">
+    <button class="ed-btn" id="ed-back">← Back to recorder</button>
+    <h2>Edit &amp; preview</h2>
+    <span class="range" style="margin-left:auto;font-family:var(--mono);color:var(--text-faint)" id="ed-total">0:00</span>
+  </div>
+
+  <div class="ed-stage"><video id="preview-vid" playsinline></video><canvas id="preview-cv" class="ed-cv" style="display:none"></canvas></div>
+
+  <div class="ed-scrub-wrap">
+    <div class="ed-scrub" id="ed-scrub">
+      <div class="ed-scrub-fill" id="ed-scrub-fill"></div>
+      <div class="ed-scrub-marks" id="ed-scrub-marks"></div>
+      <div class="ed-scrub-play" id="ed-scrub-play"></div>
+    </div>
+  </div>
+
+  <div class="ed-clip">
+    <div class="ed-clip-head">
+      <span class="who">Clip <b id="ed-clip-n">1</b> of <b id="ed-clip-total">1</b></span>
+      <button class="ed-btn" id="ed-move-l" title="Move clip earlier">◀ Move</button>
+      <button class="ed-btn" id="ed-move-r" title="Move clip later">Move ▶</button>
+      <button class="ed-btn" id="ed-split">✂ Split here</button>
+      <button class="ed-btn danger" id="ed-delete">Delete clip</button>
+      <span class="range" id="ed-range">0.00 – 0.00s</span>
+    </div>
+    <div class="trim" id="trim">
+      <canvas class="trim-wave" id="trim-wave"></canvas>
+      <div class="trim-dim" id="trim-dim-l" style="left:0"></div>
+      <div class="trim-dim" id="trim-dim-r" style="right:0"></div>
+      <div class="trim-play" id="trim-play"></div>
+      <div class="trim-handle l" id="trim-l"></div>
+      <div class="trim-handle r" id="trim-r"></div>
+    </div>
+    <div class="speed-row" id="speed-row">
+      <button class="chip" data-spd="0.25">0.25×</button>
+      <button class="chip" data-spd="0.5">0.5×</button>
+      <button class="chip" data-spd="0.75">0.75×</button>
+      <button class="chip on" data-spd="1">1×</button>
+      <button class="chip" data-spd="1.5">1.5×</button>
+      <button class="chip" data-spd="2">2×</button>
+      <button class="chip" data-spd="4">4×</button>
+    </div>
+  </div>
+
+  <div class="ed-transport">
+    <div class="ed-transport-inner">
+      <span class="tcount mono" id="ed-time">0:00 / 0:00</span>
+      <button class="t-btn" id="ed-restart" title="Restart" aria-label="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/></svg></button>
+      <button class="t-btn" id="ed-prev" title="Previous clip" aria-label="Previous clip"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5 9 12l11 7z"/></svg></button>
+      <button class="t-btn play" id="ed-play" title="Play/pause" aria-label="Play or pause"><svg id="ed-play-ic" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="t-btn" id="ed-next" title="Next clip" aria-label="Next clip"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5l11 7L4 19z"/></svg></button>
+      <div class="t-vol"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M19 5a9 9 0 0 1 0 14"/></svg><input type="range" id="ed-vol" min="0" max="100" value="100"></div>
+    </div>
+  </div>
+</div>
+
+<!-- export modal -->
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3 id="modal-title">Exporting</h3>
+    <p id="modal-sub">Stitching clips in order…</p>
+    <div class="prog"><div class="prog-bar" id="prog-bar"></div></div>
+    <button class="btn" id="modal-cancel" style="display:none">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- hidden working elements -->
+<video id="cam-vid" autoplay muted playsinline style="display:none"></video>
+<video id="import-vid" playsinline crossorigin="anonymous" style="display:none"></video>
+<canvas id="export-canvas" style="display:none"></canvas>
+<canvas id="work-canvas" style="display:none"></canvas>
+
+<!-- Vendored mp4-muxer v5.2.2 (MIT, Vanilagy) — inlined so the app stays a single offline file. Provides window.Mp4Muxer for the clean WebCodecs export. -->
+<script>
+"use strict";
+var Mp4Muxer = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var __accessCheck = (obj, member, msg) => {
+    if (!member.has(obj))
+      throw TypeError("Cannot " + msg);
+  };
+  var __privateGet = (obj, member, getter) => {
+    __accessCheck(obj, member, "read from private field");
+    return getter ? getter.call(obj) : member.get(obj);
+  };
+  var __privateAdd = (obj, member, value) => {
+    if (member.has(obj))
+      throw TypeError("Cannot add the same private member more than once");
+    member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+  };
+  var __privateSet = (obj, member, value, setter) => {
+    __accessCheck(obj, member, "write to private field");
+    setter ? setter.call(obj, value) : member.set(obj, value);
+    return value;
+  };
+  var __privateWrapper = (obj, member, setter, getter) => ({
+    set _(value) {
+      __privateSet(obj, member, value, setter);
+    },
+    get _() {
+      return __privateGet(obj, member, getter);
+    }
+  });
+  var __privateMethod = (obj, member, method) => {
+    __accessCheck(obj, member, "access private method");
+    return method;
+  };
+
+  // src/index.ts
+  var src_exports = {};
+  __export(src_exports, {
+    ArrayBufferTarget: () => ArrayBufferTarget,
+    FileSystemWritableFileStreamTarget: () => FileSystemWritableFileStreamTarget,
+    Muxer: () => Muxer,
+    StreamTarget: () => StreamTarget
+  });
+
+  // src/misc.ts
+  var bytes = new Uint8Array(8);
+  var view = new DataView(bytes.buffer);
+  var u8 = (value) => {
+    return [(value % 256 + 256) % 256];
+  };
+  var u16 = (value) => {
+    view.setUint16(0, value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var i16 = (value) => {
+    view.setInt16(0, value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var u24 = (value) => {
+    view.setUint32(0, value, false);
+    return [bytes[1], bytes[2], bytes[3]];
+  };
+  var u32 = (value) => {
+    view.setUint32(0, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var i32 = (value) => {
+    view.setInt32(0, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var u64 = (value) => {
+    view.setUint32(0, Math.floor(value / 2 ** 32), false);
+    view.setUint32(4, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]];
+  };
+  var fixed_8_8 = (value) => {
+    view.setInt16(0, 2 ** 8 * value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var fixed_16_16 = (value) => {
+    view.setInt32(0, 2 ** 16 * value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var fixed_2_30 = (value) => {
+    view.setInt32(0, 2 ** 30 * value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var ascii = (text, nullTerminated = false) => {
+    let bytes2 = Array(text.length).fill(null).map((_, i) => text.charCodeAt(i));
+    if (nullTerminated)
+      bytes2.push(0);
+    return bytes2;
+  };
+  var last = (arr) => {
+    return arr && arr[arr.length - 1];
+  };
+  var lastPresentedSample = (samples) => {
+    let result = void 0;
+    for (let sample of samples) {
+      if (!result || sample.presentationTimestamp > result.presentationTimestamp) {
+        result = sample;
+      }
+    }
+    return result;
+  };
+  var intoTimescale = (timeInSeconds, timescale, round = true) => {
+    let value = timeInSeconds * timescale;
+    return round ? Math.round(value) : value;
+  };
+  var rotationMatrix = (rotationInDegrees) => {
+    let theta = rotationInDegrees * (Math.PI / 180);
+    let cosTheta = Math.cos(theta);
+    let sinTheta = Math.sin(theta);
+    return [
+      cosTheta,
+      sinTheta,
+      0,
+      -sinTheta,
+      cosTheta,
+      0,
+      0,
+      0,
+      1
+    ];
+  };
+  var IDENTITY_MATRIX = rotationMatrix(0);
+  var matrixToBytes = (matrix) => {
+    return [
+      fixed_16_16(matrix[0]),
+      fixed_16_16(matrix[1]),
+      fixed_2_30(matrix[2]),
+      fixed_16_16(matrix[3]),
+      fixed_16_16(matrix[4]),
+      fixed_2_30(matrix[5]),
+      fixed_16_16(matrix[6]),
+      fixed_16_16(matrix[7]),
+      fixed_2_30(matrix[8])
+    ];
+  };
+  var deepClone = (x) => {
+    if (!x)
+      return x;
+    if (typeof x !== "object")
+      return x;
+    if (Array.isArray(x))
+      return x.map(deepClone);
+    return Object.fromEntries(Object.entries(x).map(([key, value]) => [key, deepClone(value)]));
+  };
+  var isU32 = (value) => {
+    return value >= 0 && value < 2 ** 32;
+  };
+
+  // src/box.ts
+  var box = (type, contents, children) => ({
+    type,
+    contents: contents && new Uint8Array(contents.flat(10)),
+    children
+  });
+  var fullBox = (type, version, flags, contents, children) => box(
+    type,
+    [u8(version), u24(flags), contents ?? []],
+    children
+  );
+  var ftyp = (details) => {
+    let minorVersion = 512;
+    if (details.fragmented)
+      return box("ftyp", [
+        ascii("iso5"),
+        // Major brand
+        u32(minorVersion),
+        // Minor version
+        // Compatible brands
+        ascii("iso5"),
+        ascii("iso6"),
+        ascii("mp41")
+      ]);
+    return box("ftyp", [
+      ascii("isom"),
+      // Major brand
+      u32(minorVersion),
+      // Minor version
+      // Compatible brands
+      ascii("isom"),
+      details.holdsAvc ? ascii("avc1") : [],
+      ascii("mp41")
+    ]);
+  };
+  var mdat = (reserveLargeSize) => ({ type: "mdat", largeSize: reserveLargeSize });
+  var free = (size) => ({ type: "free", size });
+  var moov = (tracks, creationTime, fragmented = false) => box("moov", null, [
+    mvhd(creationTime, tracks),
+    ...tracks.map((x) => trak(x, creationTime)),
+    fragmented ? mvex(tracks) : null
+  ]);
+  var mvhd = (creationTime, tracks) => {
+    let duration = intoTimescale(Math.max(
+      0,
+      ...tracks.filter((x) => x.samples.length > 0).map((x) => {
+        const lastSample = lastPresentedSample(x.samples);
+        return lastSample.presentationTimestamp + lastSample.duration;
+      })
+    ), GLOBAL_TIMESCALE);
+    let nextTrackId = Math.max(...tracks.map((x) => x.id)) + 1;
+    let needsU64 = !isU32(creationTime) || !isU32(duration);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    return fullBox("mvhd", +needsU64, 0, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(GLOBAL_TIMESCALE),
+      // Timescale
+      u32OrU64(duration),
+      // Duration
+      fixed_16_16(1),
+      // Preferred rate
+      fixed_8_8(1),
+      // Preferred volume
+      Array(10).fill(0),
+      // Reserved
+      matrixToBytes(IDENTITY_MATRIX),
+      // Matrix
+      Array(24).fill(0),
+      // Pre-defined
+      u32(nextTrackId)
+      // Next track ID
+    ]);
+  };
+  var trak = (track, creationTime) => box("trak", null, [
+    tkhd(track, creationTime),
+    mdia(track, creationTime)
+  ]);
+  var tkhd = (track, creationTime) => {
+    let lastSample = lastPresentedSample(track.samples);
+    let durationInGlobalTimescale = intoTimescale(
+      lastSample ? lastSample.presentationTimestamp + lastSample.duration : 0,
+      GLOBAL_TIMESCALE
+    );
+    let needsU64 = !isU32(creationTime) || !isU32(durationInGlobalTimescale);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    let matrix;
+    if (track.info.type === "video") {
+      matrix = typeof track.info.rotation === "number" ? rotationMatrix(track.info.rotation) : track.info.rotation;
+    } else {
+      matrix = IDENTITY_MATRIX;
+    }
+    return fullBox("tkhd", +needsU64, 3, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(track.id),
+      // Track ID
+      u32(0),
+      // Reserved
+      u32OrU64(durationInGlobalTimescale),
+      // Duration
+      Array(8).fill(0),
+      // Reserved
+      u16(0),
+      // Layer
+      u16(0),
+      // Alternate group
+      fixed_8_8(track.info.type === "audio" ? 1 : 0),
+      // Volume
+      u16(0),
+      // Reserved
+      matrixToBytes(matrix),
+      // Matrix
+      fixed_16_16(track.info.type === "video" ? track.info.width : 0),
+      // Track width
+      fixed_16_16(track.info.type === "video" ? track.info.height : 0)
+      // Track height
+    ]);
+  };
+  var mdia = (track, creationTime) => box("mdia", null, [
+    mdhd(track, creationTime),
+    hdlr(track.info.type === "video" ? "vide" : "soun"),
+    minf(track)
+  ]);
+  var mdhd = (track, creationTime) => {
+    let lastSample = lastPresentedSample(track.samples);
+    let localDuration = intoTimescale(
+      lastSample ? lastSample.presentationTimestamp + lastSample.duration : 0,
+      track.timescale
+    );
+    let needsU64 = !isU32(creationTime) || !isU32(localDuration);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    return fullBox("mdhd", +needsU64, 0, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(track.timescale),
+      // Timescale
+      u32OrU64(localDuration),
+      // Duration
+      u16(21956),
+      // Language ("und", undetermined)
+      u16(0)
+      // Quality
+    ]);
+  };
+  var hdlr = (componentSubtype) => fullBox("hdlr", 0, 0, [
+    ascii("mhlr"),
+    // Component type
+    ascii(componentSubtype),
+    // Component subtype
+    u32(0),
+    // Component manufacturer
+    u32(0),
+    // Component flags
+    u32(0),
+    // Component flags mask
+    ascii("mp4-muxer-hdlr", true)
+    // Component name
+  ]);
+  var minf = (track) => box("minf", null, [
+    track.info.type === "video" ? vmhd() : smhd(),
+    dinf(),
+    stbl(track)
+  ]);
+  var vmhd = () => fullBox("vmhd", 0, 1, [
+    u16(0),
+    // Graphics mode
+    u16(0),
+    // Opcolor R
+    u16(0),
+    // Opcolor G
+    u16(0)
+    // Opcolor B
+  ]);
+  var smhd = () => fullBox("smhd", 0, 0, [
+    u16(0),
+    // Balance
+    u16(0)
+    // Reserved
+  ]);
+  var dinf = () => box("dinf", null, [
+    dref()
+  ]);
+  var dref = () => fullBox("dref", 0, 0, [
+    u32(1)
+    // Entry count
+  ], [
+    url()
+  ]);
+  var url = () => fullBox("url ", 0, 1);
+  var stbl = (track) => {
+    const needsCtts = track.compositionTimeOffsetTable.length > 1 || track.compositionTimeOffsetTable.some((x) => x.sampleCompositionTimeOffset !== 0);
+    return box("stbl", null, [
+      stsd(track),
+      stts(track),
+      stss(track),
+      stsc(track),
+      stsz(track),
+      stco(track),
+      needsCtts ? ctts(track) : null
+    ]);
+  };
+  var stsd = (track) => fullBox("stsd", 0, 0, [
+    u32(1)
+    // Entry count
+  ], [
+    track.info.type === "video" ? videoSampleDescription(
+      VIDEO_CODEC_TO_BOX_NAME[track.info.codec],
+      track
+    ) : soundSampleDescription(
+      AUDIO_CODEC_TO_BOX_NAME[track.info.codec],
+      track
+    )
+  ]);
+  var videoSampleDescription = (compressionType, track) => box(compressionType, [
+    Array(6).fill(0),
+    // Reserved
+    u16(1),
+    // Data reference index
+    u16(0),
+    // Pre-defined
+    u16(0),
+    // Reserved
+    Array(12).fill(0),
+    // Pre-defined
+    u16(track.info.width),
+    // Width
+    u16(track.info.height),
+    // Height
+    u32(4718592),
+    // Horizontal resolution
+    u32(4718592),
+    // Vertical resolution
+    u32(0),
+    // Reserved
+    u16(1),
+    // Frame count
+    Array(32).fill(0),
+    // Compressor name
+    u16(24),
+    // Depth
+    i16(65535)
+    // Pre-defined
+  ], [
+    VIDEO_CODEC_TO_CONFIGURATION_BOX[track.info.codec](track),
+    track.info.decoderConfig.colorSpace ? colr(track) : null
+  ]);
+  var COLOR_PRIMARIES_MAP = {
+    "bt709": 1,
+    // ITU-R BT.709
+    "bt470bg": 5,
+    // ITU-R BT.470BG
+    "smpte170m": 6
+    // ITU-R BT.601 525 - SMPTE 170M
+  };
+  var TRANSFER_CHARACTERISTICS_MAP = {
+    "bt709": 1,
+    // ITU-R BT.709
+    "smpte170m": 6,
+    // SMPTE 170M
+    "iec61966-2-1": 13
+    // IEC 61966-2-1
+  };
+  var MATRIX_COEFFICIENTS_MAP = {
+    "rgb": 0,
+    // Identity
+    "bt709": 1,
+    // ITU-R BT.709
+    "bt470bg": 5,
+    // ITU-R BT.470BG
+    "smpte170m": 6
+    // SMPTE 170M
+  };
+  var colr = (track) => box("colr", [
+    ascii("nclx"),
+    // Colour type
+    u16(COLOR_PRIMARIES_MAP[track.info.decoderConfig.colorSpace.primaries]),
+    // Colour primaries
+    u16(TRANSFER_CHARACTERISTICS_MAP[track.info.decoderConfig.colorSpace.transfer]),
+    // Transfer characteristics
+    u16(MATRIX_COEFFICIENTS_MAP[track.info.decoderConfig.colorSpace.matrix]),
+    // Matrix coefficients
+    u8((track.info.decoderConfig.colorSpace.fullRange ? 1 : 0) << 7)
+    // Full range flag
+  ]);
+  var avcC = (track) => track.info.decoderConfig && box("avcC", [
+    // For AVC, description is an AVCDecoderConfigurationRecord, so nothing else to do here
+    ...new Uint8Array(track.info.decoderConfig.description)
+  ]);
+  var hvcC = (track) => track.info.decoderConfig && box("hvcC", [
+    // For HEVC, description is a HEVCDecoderConfigurationRecord, so nothing else to do here
+    ...new Uint8Array(track.info.decoderConfig.description)
+  ]);
+  var vpcC = (track) => {
+    if (!track.info.decoderConfig) {
+      return null;
+    }
+    let decoderConfig = track.info.decoderConfig;
+    if (!decoderConfig.colorSpace) {
+      throw new Error(`'colorSpace' is required in the decoder config for VP9.`);
+    }
+    let parts = decoderConfig.codec.split(".");
+    let profile = Number(parts[1]);
+    let level = Number(parts[2]);
+    let bitDepth = Number(parts[3]);
+    let chromaSubsampling = 0;
+    let thirdByte = (bitDepth << 4) + (chromaSubsampling << 1) + Number(decoderConfig.colorSpace.fullRange);
+    let colourPrimaries = 2;
+    let transferCharacteristics = 2;
+    let matrixCoefficients = 2;
+    return fullBox("vpcC", 1, 0, [
+      u8(profile),
+      // Profile
+      u8(level),
+      // Level
+      u8(thirdByte),
+      // Bit depth, chroma subsampling, full range
+      u8(colourPrimaries),
+      // Colour primaries
+      u8(transferCharacteristics),
+      // Transfer characteristics
+      u8(matrixCoefficients),
+      // Matrix coefficients
+      u16(0)
+      // Codec initialization data size
+    ]);
+  };
+  var av1C = () => {
+    let marker = 1;
+    let version = 1;
+    let firstByte = (marker << 7) + version;
+    return box("av1C", [
+      firstByte,
+      0,
+      0,
+      0
+    ]);
+  };
+  var soundSampleDescription = (compressionType, track) => box(compressionType, [
+    Array(6).fill(0),
+    // Reserved
+    u16(1),
+    // Data reference index
+    u16(0),
+    // Version
+    u16(0),
+    // Revision level
+    u32(0),
+    // Vendor
+    u16(track.info.numberOfChannels),
+    // Number of channels
+    u16(16),
+    // Sample size (bits)
+    u16(0),
+    // Compression ID
+    u16(0),
+    // Packet size
+    fixed_16_16(track.info.sampleRate)
+    // Sample rate
+  ], [
+    AUDIO_CODEC_TO_CONFIGURATION_BOX[track.info.codec](track)
+  ]);
+  var esds = (track) => {
+    let description = new Uint8Array(track.info.decoderConfig.description);
+    return fullBox("esds", 0, 0, [
+      // https://stackoverflow.com/a/54803118
+      u32(58753152),
+      // TAG(3) = Object Descriptor ([2])
+      u8(32 + description.byteLength),
+      // length of this OD (which includes the next 2 tags)
+      u16(1),
+      // ES_ID = 1
+      u8(0),
+      // flags etc = 0
+      u32(75530368),
+      // TAG(4) = ES Descriptor ([2]) embedded in above OD
+      u8(18 + description.byteLength),
+      // length of this ESD
+      u8(64),
+      // MPEG-4 Audio
+      u8(21),
+      // stream type(6bits)=5 audio, flags(2bits)=1
+      u24(0),
+      // 24bit buffer size
+      u32(130071),
+      // max bitrate
+      u32(130071),
+      // avg bitrate
+      u32(92307584),
+      // TAG(5) = ASC ([2],[3]) embedded in above OD
+      u8(description.byteLength),
+      // length
+      ...description,
+      u32(109084800),
+      // TAG(6)
+      u8(1),
+      // length
+      u8(2)
+      // data
+    ]);
+  };
+  var dOps = (track) => {
+    let preskip = 3840;
+    let gain = 0;
+    const description = track.info.decoderConfig?.description;
+    if (description) {
+      if (description.byteLength < 18) {
+        throw new TypeError("Invalid decoder description provided for Opus; must be at least 18 bytes long.");
+      }
+      const view2 = ArrayBuffer.isView(description) ? new DataView(description.buffer, description.byteOffset, description.byteLength) : new DataView(description);
+      preskip = view2.getUint16(10, true);
+      gain = view2.getInt16(14, true);
+    }
+    return box("dOps", [
+      u8(0),
+      // Version
+      u8(track.info.numberOfChannels),
+      // OutputChannelCount
+      u16(preskip),
+      u32(track.info.sampleRate),
+      // InputSampleRate
+      fixed_8_8(gain),
+      // OutputGain
+      u8(0)
+      // ChannelMappingFamily
+    ]);
+  };
+  var stts = (track) => {
+    return fullBox("stts", 0, 0, [
+      u32(track.timeToSampleTable.length),
+      // Number of entries
+      track.timeToSampleTable.map((x) => [
+        // Time-to-sample table
+        u32(x.sampleCount),
+        // Sample count
+        u32(x.sampleDelta)
+        // Sample duration
+      ])
+    ]);
+  };
+  var stss = (track) => {
+    if (track.samples.every((x) => x.type === "key"))
+      return null;
+    let keySamples = [...track.samples.entries()].filter(([, sample]) => sample.type === "key");
+    return fullBox("stss", 0, 0, [
+      u32(keySamples.length),
+      // Number of entries
+      keySamples.map(([index]) => u32(index + 1))
+      // Sync sample table
+    ]);
+  };
+  var stsc = (track) => {
+    return fullBox("stsc", 0, 0, [
+      u32(track.compactlyCodedChunkTable.length),
+      // Number of entries
+      track.compactlyCodedChunkTable.map((x) => [
+        // Sample-to-chunk table
+        u32(x.firstChunk),
+        // First chunk
+        u32(x.samplesPerChunk),
+        // Samples per chunk
+        u32(1)
+        // Sample description index
+      ])
+    ]);
+  };
+  var stsz = (track) => fullBox("stsz", 0, 0, [
+    u32(0),
+    // Sample size (0 means non-constant size)
+    u32(track.samples.length),
+    // Number of entries
+    track.samples.map((x) => u32(x.size))
+    // Sample size table
+  ]);
+  var stco = (track) => {
+    if (track.finalizedChunks.length > 0 && last(track.finalizedChunks).offset >= 2 ** 32) {
+      return fullBox("co64", 0, 0, [
+        u32(track.finalizedChunks.length),
+        // Number of entries
+        track.finalizedChunks.map((x) => u64(x.offset))
+        // Chunk offset table
+      ]);
+    }
+    return fullBox("stco", 0, 0, [
+      u32(track.finalizedChunks.length),
+      // Number of entries
+      track.finalizedChunks.map((x) => u32(x.offset))
+      // Chunk offset table
+    ]);
+  };
+  var ctts = (track) => {
+    return fullBox("ctts", 0, 0, [
+      u32(track.compositionTimeOffsetTable.length),
+      // Number of entries
+      track.compositionTimeOffsetTable.map((x) => [
+        // Time-to-sample table
+        u32(x.sampleCount),
+        // Sample count
+        u32(x.sampleCompositionTimeOffset)
+        // Sample offset
+      ])
+    ]);
+  };
+  var mvex = (tracks) => {
+    return box("mvex", null, tracks.map(trex));
+  };
+  var trex = (track) => {
+    return fullBox("trex", 0, 0, [
+      u32(track.id),
+      // Track ID
+      u32(1),
+      // Default sample description index
+      u32(0),
+      // Default sample duration
+      u32(0),
+      // Default sample size
+      u32(0)
+      // Default sample flags
+    ]);
+  };
+  var moof = (sequenceNumber, tracks) => {
+    return box("moof", null, [
+      mfhd(sequenceNumber),
+      ...tracks.map(traf)
+    ]);
+  };
+  var mfhd = (sequenceNumber) => {
+    return fullBox("mfhd", 0, 0, [
+      u32(sequenceNumber)
+      // Sequence number
+    ]);
+  };
+  var fragmentSampleFlags = (sample) => {
+    let byte1 = 0;
+    let byte2 = 0;
+    let byte3 = 0;
+    let byte4 = 0;
+    let sampleIsDifferenceSample = sample.type === "delta";
+    byte2 |= +sampleIsDifferenceSample;
+    if (sampleIsDifferenceSample) {
+      byte1 |= 1;
+    } else {
+      byte1 |= 2;
+    }
+    return byte1 << 24 | byte2 << 16 | byte3 << 8 | byte4;
+  };
+  var traf = (track) => {
+    return box("traf", null, [
+      tfhd(track),
+      tfdt(track),
+      trun(track)
+    ]);
+  };
+  var tfhd = (track) => {
+    let tfFlags = 0;
+    tfFlags |= 8;
+    tfFlags |= 16;
+    tfFlags |= 32;
+    tfFlags |= 131072;
+    let referenceSample = track.currentChunk.samples[1] ?? track.currentChunk.samples[0];
+    let referenceSampleInfo = {
+      duration: referenceSample.timescaleUnitsToNextSample,
+      size: referenceSample.size,
+      flags: fragmentSampleFlags(referenceSample)
+    };
+    return fullBox("tfhd", 0, tfFlags, [
+      u32(track.id),
+      // Track ID
+      u32(referenceSampleInfo.duration),
+      // Default sample duration
+      u32(referenceSampleInfo.size),
+      // Default sample size
+      u32(referenceSampleInfo.flags)
+      // Default sample flags
+    ]);
+  };
+  var tfdt = (track) => {
+    return fullBox("tfdt", 1, 0, [
+      u64(intoTimescale(track.currentChunk.startTimestamp, track.timescale))
+      // Base Media Decode Time
+    ]);
+  };
+  var trun = (track) => {
+    let allSampleDurations = track.currentChunk.samples.map((x) => x.timescaleUnitsToNextSample);
+    let allSampleSizes = track.currentChunk.samples.map((x) => x.size);
+    let allSampleFlags = track.currentChunk.samples.map(fragmentSampleFlags);
+    let allSampleCompositionTimeOffsets = track.currentChunk.samples.map((x) => intoTimescale(x.presentationTimestamp - x.decodeTimestamp, track.timescale));
+    let uniqueSampleDurations = new Set(allSampleDurations);
+    let uniqueSampleSizes = new Set(allSampleSizes);
+    let uniqueSampleFlags = new Set(allSampleFlags);
+    let uniqueSampleCompositionTimeOffsets = new Set(allSampleCompositionTimeOffsets);
+    let firstSampleFlagsPresent = uniqueSampleFlags.size === 2 && allSampleFlags[0] !== allSampleFlags[1];
+    let sampleDurationPresent = uniqueSampleDurations.size > 1;
+    let sampleSizePresent = uniqueSampleSizes.size > 1;
+    let sampleFlagsPresent = !firstSampleFlagsPresent && uniqueSampleFlags.size > 1;
+    let sampleCompositionTimeOffsetsPresent = uniqueSampleCompositionTimeOffsets.size > 1 || [...uniqueSampleCompositionTimeOffsets].some((x) => x !== 0);
+    let flags = 0;
+    flags |= 1;
+    flags |= 4 * +firstSampleFlagsPresent;
+    flags |= 256 * +sampleDurationPresent;
+    flags |= 512 * +sampleSizePresent;
+    flags |= 1024 * +sampleFlagsPresent;
+    flags |= 2048 * +sampleCompositionTimeOffsetsPresent;
+    return fullBox("trun", 1, flags, [
+      u32(track.currentChunk.samples.length),
+      // Sample count
+      u32(track.currentChunk.offset - track.currentChunk.moofOffset || 0),
+      // Data offset
+      firstSampleFlagsPresent ? u32(allSampleFlags[0]) : [],
+      track.currentChunk.samples.map((_, i) => [
+        sampleDurationPresent ? u32(allSampleDurations[i]) : [],
+        // Sample duration
+        sampleSizePresent ? u32(allSampleSizes[i]) : [],
+        // Sample size
+        sampleFlagsPresent ? u32(allSampleFlags[i]) : [],
+        // Sample flags
+        // Sample composition time offsets
+        sampleCompositionTimeOffsetsPresent ? i32(allSampleCompositionTimeOffsets[i]) : []
+      ])
+    ]);
+  };
+  var mfra = (tracks) => {
+    return box("mfra", null, [
+      ...tracks.map(tfra),
+      mfro()
+    ]);
+  };
+  var tfra = (track, trackIndex) => {
+    let version = 1;
+    return fullBox("tfra", version, 0, [
+      u32(track.id),
+      // Track ID
+      u32(63),
+      // This specifies that traf number, trun number and sample number are 32-bit ints
+      u32(track.finalizedChunks.length),
+      // Number of entries
+      track.finalizedChunks.map((chunk) => [
+        u64(intoTimescale(chunk.startTimestamp, track.timescale)),
+        // Time
+        u64(chunk.moofOffset),
+        // moof offset
+        u32(trackIndex + 1),
+        // traf number
+        u32(1),
+        // trun number
+        u32(1)
+        // Sample number
+      ])
+    ]);
+  };
+  var mfro = () => {
+    return fullBox("mfro", 0, 0, [
+      // This value needs to be overwritten manually from the outside, where the actual size of the enclosing mfra box
+      // is known
+      u32(0)
+      // Size
+    ]);
+  };
+  var VIDEO_CODEC_TO_BOX_NAME = {
+    "avc": "avc1",
+    "hevc": "hvc1",
+    "vp9": "vp09",
+    "av1": "av01"
+  };
+  var VIDEO_CODEC_TO_CONFIGURATION_BOX = {
+    "avc": avcC,
+    "hevc": hvcC,
+    "vp9": vpcC,
+    "av1": av1C
+  };
+  var AUDIO_CODEC_TO_BOX_NAME = {
+    "aac": "mp4a",
+    "opus": "Opus"
+  };
+  var AUDIO_CODEC_TO_CONFIGURATION_BOX = {
+    "aac": esds,
+    "opus": dOps
+  };
+
+  // src/target.ts
+  var isTarget = Symbol("isTarget");
+  var Target = class {
+  };
+  isTarget;
+  var ArrayBufferTarget = class extends Target {
+    constructor() {
+      super(...arguments);
+      this.buffer = null;
+    }
+  };
+  var StreamTarget = class extends Target {
+    constructor(options) {
+      super();
+      this.options = options;
+      if (typeof options !== "object") {
+        throw new TypeError("StreamTarget requires an options object to be passed to its constructor.");
+      }
+      if (options.onData) {
+        if (typeof options.onData !== "function") {
+          throw new TypeError("options.onData, when provided, must be a function.");
+        }
+        if (options.onData.length < 2) {
+          throw new TypeError(
+            "options.onData, when provided, must be a function that takes in at least two arguments (data and position). Ignoring the position argument, which specifies the byte offset at which the data is to be written, can lead to broken outputs."
+          );
+        }
+      }
+      if (options.chunked !== void 0 && typeof options.chunked !== "boolean") {
+        throw new TypeError("options.chunked, when provided, must be a boolean.");
+      }
+      if (options.chunkSize !== void 0 && (!Number.isInteger(options.chunkSize) || options.chunkSize < 1024)) {
+        throw new TypeError("options.chunkSize, when provided, must be an integer and not smaller than 1024.");
+      }
+    }
+  };
+  var FileSystemWritableFileStreamTarget = class extends Target {
+    constructor(stream, options) {
+      super();
+      this.stream = stream;
+      this.options = options;
+      if (!(stream instanceof FileSystemWritableFileStream)) {
+        throw new TypeError("FileSystemWritableFileStreamTarget requires a FileSystemWritableFileStream instance.");
+      }
+      if (options !== void 0 && typeof options !== "object") {
+        throw new TypeError("FileSystemWritableFileStreamTarget's options, when provided, must be an object.");
+      }
+      if (options) {
+        if (options.chunkSize !== void 0 && (!Number.isInteger(options.chunkSize) || options.chunkSize <= 0)) {
+          throw new TypeError("options.chunkSize, when provided, must be a positive integer");
+        }
+      }
+    }
+  };
+
+  // src/writer.ts
+  var _helper, _helperView;
+  var Writer = class {
+    constructor() {
+      this.pos = 0;
+      __privateAdd(this, _helper, new Uint8Array(8));
+      __privateAdd(this, _helperView, new DataView(__privateGet(this, _helper).buffer));
+      /**
+       * Stores the position from the start of the file to where boxes elements have been written. This is used to
+       * rewrite/edit elements that were already added before, and to measure sizes of things.
+       */
+      this.offsets = /* @__PURE__ */ new WeakMap();
+    }
+    /** Sets the current position for future writes to a new one. */
+    seek(newPos) {
+      this.pos = newPos;
+    }
+    writeU32(value) {
+      __privateGet(this, _helperView).setUint32(0, value, false);
+      this.write(__privateGet(this, _helper).subarray(0, 4));
+    }
+    writeU64(value) {
+      __privateGet(this, _helperView).setUint32(0, Math.floor(value / 2 ** 32), false);
+      __privateGet(this, _helperView).setUint32(4, value, false);
+      this.write(__privateGet(this, _helper).subarray(0, 8));
+    }
+    writeAscii(text) {
+      for (let i = 0; i < text.length; i++) {
+        __privateGet(this, _helperView).setUint8(i % 8, text.charCodeAt(i));
+        if (i % 8 === 7)
+          this.write(__privateGet(this, _helper));
+      }
+      if (text.length % 8 !== 0) {
+        this.write(__privateGet(this, _helper).subarray(0, text.length % 8));
+      }
+    }
+    writeBox(box2) {
+      this.offsets.set(box2, this.pos);
+      if (box2.contents && !box2.children) {
+        this.writeBoxHeader(box2, box2.size ?? box2.contents.byteLength + 8);
+        this.write(box2.contents);
+      } else {
+        let startPos = this.pos;
+        this.writeBoxHeader(box2, 0);
+        if (box2.contents)
+          this.write(box2.contents);
+        if (box2.children) {
+          for (let child of box2.children)
+            if (child)
+              this.writeBox(child);
+        }
+        let endPos = this.pos;
+        let size = box2.size ?? endPos - startPos;
+        this.seek(startPos);
+        this.writeBoxHeader(box2, size);
+        this.seek(endPos);
+      }
+    }
+    writeBoxHeader(box2, size) {
+      this.writeU32(box2.largeSize ? 1 : size);
+      this.writeAscii(box2.type);
+      if (box2.largeSize)
+        this.writeU64(size);
+    }
+    measureBoxHeader(box2) {
+      return 8 + (box2.largeSize ? 8 : 0);
+    }
+    patchBox(box2) {
+      let endPos = this.pos;
+      this.seek(this.offsets.get(box2));
+      this.writeBox(box2);
+      this.seek(endPos);
+    }
+    measureBox(box2) {
+      if (box2.contents && !box2.children) {
+        let headerSize = this.measureBoxHeader(box2);
+        return headerSize + box2.contents.byteLength;
+      } else {
+        let result = this.measureBoxHeader(box2);
+        if (box2.contents)
+          result += box2.contents.byteLength;
+        if (box2.children) {
+          for (let child of box2.children)
+            if (child)
+              result += this.measureBox(child);
+        }
+        return result;
+      }
+    }
+  };
+  _helper = new WeakMap();
+  _helperView = new WeakMap();
+  var _target, _buffer, _bytes, _maxPos, _ensureSize, ensureSize_fn;
+  var ArrayBufferTargetWriter = class extends Writer {
+    constructor(target) {
+      super();
+      __privateAdd(this, _ensureSize);
+      __privateAdd(this, _target, void 0);
+      __privateAdd(this, _buffer, new ArrayBuffer(2 ** 16));
+      __privateAdd(this, _bytes, new Uint8Array(__privateGet(this, _buffer)));
+      __privateAdd(this, _maxPos, 0);
+      __privateSet(this, _target, target);
+    }
+    write(data) {
+      __privateMethod(this, _ensureSize, ensureSize_fn).call(this, this.pos + data.byteLength);
+      __privateGet(this, _bytes).set(data, this.pos);
+      this.pos += data.byteLength;
+      __privateSet(this, _maxPos, Math.max(__privateGet(this, _maxPos), this.pos));
+    }
+    finalize() {
+      __privateMethod(this, _ensureSize, ensureSize_fn).call(this, this.pos);
+      __privateGet(this, _target).buffer = __privateGet(this, _buffer).slice(0, Math.max(__privateGet(this, _maxPos), this.pos));
+    }
+  };
+  _target = new WeakMap();
+  _buffer = new WeakMap();
+  _bytes = new WeakMap();
+  _maxPos = new WeakMap();
+  _ensureSize = new WeakSet();
+  ensureSize_fn = function(size) {
+    let newLength = __privateGet(this, _buffer).byteLength;
+    while (newLength < size)
+      newLength *= 2;
+    if (newLength === __privateGet(this, _buffer).byteLength)
+      return;
+    let newBuffer = new ArrayBuffer(newLength);
+    let newBytes = new Uint8Array(newBuffer);
+    newBytes.set(__privateGet(this, _bytes), 0);
+    __privateSet(this, _buffer, newBuffer);
+    __privateSet(this, _bytes, newBytes);
+  };
+  var DEFAULT_CHUNK_SIZE = 2 ** 24;
+  var MAX_CHUNKS_AT_ONCE = 2;
+  var _target2, _sections, _chunked, _chunkSize, _chunks, _writeDataIntoChunks, writeDataIntoChunks_fn, _insertSectionIntoChunk, insertSectionIntoChunk_fn, _createChunk, createChunk_fn, _flushChunks, flushChunks_fn;
+  var StreamTargetWriter = class extends Writer {
+    constructor(target) {
+      super();
+      __privateAdd(this, _writeDataIntoChunks);
+      __privateAdd(this, _insertSectionIntoChunk);
+      __privateAdd(this, _createChunk);
+      __privateAdd(this, _flushChunks);
+      __privateAdd(this, _target2, void 0);
+      __privateAdd(this, _sections, []);
+      __privateAdd(this, _chunked, void 0);
+      __privateAdd(this, _chunkSize, void 0);
+      /**
+       * The data is divided up into fixed-size chunks, whose contents are first filled in RAM and then flushed out.
+       * A chunk is flushed if all of its contents have been written.
+       */
+      __privateAdd(this, _chunks, []);
+      __privateSet(this, _target2, target);
+      __privateSet(this, _chunked, target.options?.chunked ?? false);
+      __privateSet(this, _chunkSize, target.options?.chunkSize ?? DEFAULT_CHUNK_SIZE);
+    }
+    write(data) {
+      __privateGet(this, _sections).push({
+        data: data.slice(),
+        start: this.pos
+      });
+      this.pos += data.byteLength;
+    }
+    flush() {
+      if (__privateGet(this, _sections).length === 0)
+        return;
+      let chunks = [];
+      let sorted = [...__privateGet(this, _sections)].sort((a, b) => a.start - b.start);
+      chunks.push({
+        start: sorted[0].start,
+        size: sorted[0].data.byteLength
+      });
+      for (let i = 1; i < sorted.length; i++) {
+        let lastChunk = chunks[chunks.length - 1];
+        let section = sorted[i];
+        if (section.start <= lastChunk.start + lastChunk.size) {
+          lastChunk.size = Math.max(lastChunk.size, section.start + section.data.byteLength - lastChunk.start);
+        } else {
+          chunks.push({
+            start: section.start,
+            size: section.data.byteLength
+          });
+        }
+      }
+      for (let chunk of chunks) {
+        chunk.data = new Uint8Array(chunk.size);
+        for (let section of __privateGet(this, _sections)) {
+          if (chunk.start <= section.start && section.start < chunk.start + chunk.size) {
+            chunk.data.set(section.data, section.start - chunk.start);
+          }
+        }
+        if (__privateGet(this, _chunked)) {
+          __privateMethod(this, _writeDataIntoChunks, writeDataIntoChunks_fn).call(this, chunk.data, chunk.start);
+          __privateMethod(this, _flushChunks, flushChunks_fn).call(this);
+        } else {
+          __privateGet(this, _target2).options.onData?.(chunk.data, chunk.start);
+        }
+      }
+      __privateGet(this, _sections).length = 0;
+    }
+    finalize() {
+      if (__privateGet(this, _chunked)) {
+        __privateMethod(this, _flushChunks, flushChunks_fn).call(this, true);
+      }
+    }
+  };
+  _target2 = new WeakMap();
+  _sections = new WeakMap();
+  _chunked = new WeakMap();
+  _chunkSize = new WeakMap();
+  _chunks = new WeakMap();
+  _writeDataIntoChunks = new WeakSet();
+  writeDataIntoChunks_fn = function(data, position) {
+    let chunkIndex = __privateGet(this, _chunks).findIndex((x) => x.start <= position && position < x.start + __privateGet(this, _chunkSize));
+    if (chunkIndex === -1)
+      chunkIndex = __privateMethod(this, _createChunk, createChunk_fn).call(this, position);
+    let chunk = __privateGet(this, _chunks)[chunkIndex];
+    let relativePosition = position - chunk.start;
+    let toWrite = data.subarray(0, Math.min(__privateGet(this, _chunkSize) - relativePosition, data.byteLength));
+    chunk.data.set(toWrite, relativePosition);
+    let section = {
+      start: relativePosition,
+      end: relativePosition + toWrite.byteLength
+    };
+    __privateMethod(this, _insertSectionIntoChunk, insertSectionIntoChunk_fn).call(this, chunk, section);
+    if (chunk.written[0].start === 0 && chunk.written[0].end === __privateGet(this, _chunkSize)) {
+      chunk.shouldFlush = true;
+    }
+    if (__privateGet(this, _chunks).length > MAX_CHUNKS_AT_ONCE) {
+      for (let i = 0; i < __privateGet(this, _chunks).length - 1; i++) {
+        __privateGet(this, _chunks)[i].shouldFlush = true;
+      }
+      __privateMethod(this, _flushChunks, flushChunks_fn).call(this);
+    }
+    if (toWrite.byteLength < data.byteLength) {
+      __privateMethod(this, _writeDataIntoChunks, writeDataIntoChunks_fn).call(this, data.subarray(toWrite.byteLength), position + toWrite.byteLength);
+    }
+  };
+  _insertSectionIntoChunk = new WeakSet();
+  insertSectionIntoChunk_fn = function(chunk, section) {
+    let low = 0;
+    let high = chunk.written.length - 1;
+    let index = -1;
+    while (low <= high) {
+      let mid = Math.floor(low + (high - low + 1) / 2);
+      if (chunk.written[mid].start <= section.start) {
+        low = mid + 1;
+        index = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+    chunk.written.splice(index + 1, 0, section);
+    if (index === -1 || chunk.written[index].end < section.start)
+      index++;
+    while (index < chunk.written.length - 1 && chunk.written[index].end >= chunk.written[index + 1].start) {
+      chunk.written[index].end = Math.max(chunk.written[index].end, chunk.written[index + 1].end);
+      chunk.written.splice(index + 1, 1);
+    }
+  };
+  _createChunk = new WeakSet();
+  createChunk_fn = function(includesPosition) {
+    let start = Math.floor(includesPosition / __privateGet(this, _chunkSize)) * __privateGet(this, _chunkSize);
+    let chunk = {
+      start,
+      data: new Uint8Array(__privateGet(this, _chunkSize)),
+      written: [],
+      shouldFlush: false
+    };
+    __privateGet(this, _chunks).push(chunk);
+    __privateGet(this, _chunks).sort((a, b) => a.start - b.start);
+    return __privateGet(this, _chunks).indexOf(chunk);
+  };
+  _flushChunks = new WeakSet();
+  flushChunks_fn = function(force = false) {
+    for (let i = 0; i < __privateGet(this, _chunks).length; i++) {
+      let chunk = __privateGet(this, _chunks)[i];
+      if (!chunk.shouldFlush && !force)
+        continue;
+      for (let section of chunk.written) {
+        __privateGet(this, _target2).options.onData?.(
+          chunk.data.subarray(section.start, section.end),
+          chunk.start + section.start
+        );
+      }
+      __privateGet(this, _chunks).splice(i--, 1);
+    }
+  };
+  var FileSystemWritableFileStreamTargetWriter = class extends StreamTargetWriter {
+    constructor(target) {
+      super(new StreamTarget({
+        onData: (data, position) => target.stream.write({
+          type: "write",
+          data,
+          position
+        }),
+        chunked: true,
+        chunkSize: target.options?.chunkSize
+      }));
+    }
+  };
+
+  // src/muxer.ts
+  var GLOBAL_TIMESCALE = 1e3;
+  var SUPPORTED_VIDEO_CODECS = ["avc", "hevc", "vp9", "av1"];
+  var SUPPORTED_AUDIO_CODECS = ["aac", "opus"];
+  var TIMESTAMP_OFFSET = 2082844800;
+  var FIRST_TIMESTAMP_BEHAVIORS = ["strict", "offset", "cross-track-offset"];
+  var _options, _writer, _ftypSize, _mdat, _videoTrack, _audioTrack, _creationTime, _finalizedChunks, _nextFragmentNumber, _videoSampleQueue, _audioSampleQueue, _finalized, _validateOptions, validateOptions_fn, _writeHeader, writeHeader_fn, _computeMoovSizeUpperBound, computeMoovSizeUpperBound_fn, _prepareTracks, prepareTracks_fn, _generateMpeg4AudioSpecificConfig, generateMpeg4AudioSpecificConfig_fn, _createSampleForTrack, createSampleForTrack_fn, _addSampleToTrack, addSampleToTrack_fn, _validateTimestamp, validateTimestamp_fn, _finalizeCurrentChunk, finalizeCurrentChunk_fn, _finalizeFragment, finalizeFragment_fn, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn, _ensureNotFinalized, ensureNotFinalized_fn;
+  var Muxer = class {
+    constructor(options) {
+      __privateAdd(this, _validateOptions);
+      __privateAdd(this, _writeHeader);
+      __privateAdd(this, _computeMoovSizeUpperBound);
+      __privateAdd(this, _prepareTracks);
+      // https://wiki.multimedia.cx/index.php/MPEG-4_Audio
+      __privateAdd(this, _generateMpeg4AudioSpecificConfig);
+      __privateAdd(this, _createSampleForTrack);
+      __privateAdd(this, _addSampleToTrack);
+      __privateAdd(this, _validateTimestamp);
+      __privateAdd(this, _finalizeCurrentChunk);
+      __privateAdd(this, _finalizeFragment);
+      __privateAdd(this, _maybeFlushStreamingTargetWriter);
+      __privateAdd(this, _ensureNotFinalized);
+      __privateAdd(this, _options, void 0);
+      __privateAdd(this, _writer, void 0);
+      __privateAdd(this, _ftypSize, void 0);
+      __privateAdd(this, _mdat, void 0);
+      __privateAdd(this, _videoTrack, null);
+      __privateAdd(this, _audioTrack, null);
+      __privateAdd(this, _creationTime, Math.floor(Date.now() / 1e3) + TIMESTAMP_OFFSET);
+      __privateAdd(this, _finalizedChunks, []);
+      // Fields for fragmented MP4:
+      __privateAdd(this, _nextFragmentNumber, 1);
+      __privateAdd(this, _videoSampleQueue, []);
+      __privateAdd(this, _audioSampleQueue, []);
+      __privateAdd(this, _finalized, false);
+      __privateMethod(this, _validateOptions, validateOptions_fn).call(this, options);
+      options.video = deepClone(options.video);
+      options.audio = deepClone(options.audio);
+      options.fastStart = deepClone(options.fastStart);
+      this.target = options.target;
+      __privateSet(this, _options, {
+        firstTimestampBehavior: "strict",
+        ...options
+      });
+      if (options.target instanceof ArrayBufferTarget) {
+        __privateSet(this, _writer, new ArrayBufferTargetWriter(options.target));
+      } else if (options.target instanceof StreamTarget) {
+        __privateSet(this, _writer, new StreamTargetWriter(options.target));
+      } else if (options.target instanceof FileSystemWritableFileStreamTarget) {
+        __privateSet(this, _writer, new FileSystemWritableFileStreamTargetWriter(options.target));
+      } else {
+        throw new Error(`Invalid target: ${options.target}`);
+      }
+      __privateMethod(this, _prepareTracks, prepareTracks_fn).call(this);
+      __privateMethod(this, _writeHeader, writeHeader_fn).call(this);
+    }
+    addVideoChunk(sample, meta, timestamp, compositionTimeOffset) {
+      if (!(sample instanceof EncodedVideoChunk)) {
+        throw new TypeError("addVideoChunk's first argument (sample) must be of type EncodedVideoChunk.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addVideoChunk's second argument (meta), when provided, must be an object.");
+      }
+      if (timestamp !== void 0 && (!Number.isFinite(timestamp) || timestamp < 0)) {
+        throw new TypeError(
+          "addVideoChunk's third argument (timestamp), when provided, must be a non-negative real number."
+        );
+      }
+      if (compositionTimeOffset !== void 0 && !Number.isFinite(compositionTimeOffset)) {
+        throw new TypeError(
+          "addVideoChunk's fourth argument (compositionTimeOffset), when provided, must be a real number."
+        );
+      }
+      let data = new Uint8Array(sample.byteLength);
+      sample.copyTo(data);
+      this.addVideoChunkRaw(
+        data,
+        sample.type,
+        timestamp ?? sample.timestamp,
+        sample.duration,
+        meta,
+        compositionTimeOffset
+      );
+    }
+    addVideoChunkRaw(data, type, timestamp, duration, meta, compositionTimeOffset) {
+      if (!(data instanceof Uint8Array)) {
+        throw new TypeError("addVideoChunkRaw's first argument (data) must be an instance of Uint8Array.");
+      }
+      if (type !== "key" && type !== "delta") {
+        throw new TypeError("addVideoChunkRaw's second argument (type) must be either 'key' or 'delta'.");
+      }
+      if (!Number.isFinite(timestamp) || timestamp < 0) {
+        throw new TypeError("addVideoChunkRaw's third argument (timestamp) must be a non-negative real number.");
+      }
+      if (!Number.isFinite(duration) || duration < 0) {
+        throw new TypeError("addVideoChunkRaw's fourth argument (duration) must be a non-negative real number.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addVideoChunkRaw's fifth argument (meta), when provided, must be an object.");
+      }
+      if (compositionTimeOffset !== void 0 && !Number.isFinite(compositionTimeOffset)) {
+        throw new TypeError(
+          "addVideoChunkRaw's sixth argument (compositionTimeOffset), when provided, must be a real number."
+        );
+      }
+      __privateMethod(this, _ensureNotFinalized, ensureNotFinalized_fn).call(this);
+      if (!__privateGet(this, _options).video)
+        throw new Error("No video track declared.");
+      if (typeof __privateGet(this, _options).fastStart === "object" && __privateGet(this, _videoTrack).samples.length === __privateGet(this, _options).fastStart.expectedVideoChunks) {
+        throw new Error(`Cannot add more video chunks than specified in 'fastStart' (${__privateGet(this, _options).fastStart.expectedVideoChunks}).`);
+      }
+      let videoSample = __privateMethod(this, _createSampleForTrack, createSampleForTrack_fn).call(this, __privateGet(this, _videoTrack), data, type, timestamp, duration, meta, compositionTimeOffset);
+      if (__privateGet(this, _options).fastStart === "fragmented" && __privateGet(this, _audioTrack)) {
+        while (__privateGet(this, _audioSampleQueue).length > 0 && __privateGet(this, _audioSampleQueue)[0].decodeTimestamp <= videoSample.decodeTimestamp) {
+          let audioSample = __privateGet(this, _audioSampleQueue).shift();
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        }
+        if (videoSample.decodeTimestamp <= __privateGet(this, _audioTrack).lastDecodeTimestamp) {
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        } else {
+          __privateGet(this, _videoSampleQueue).push(videoSample);
+        }
+      } else {
+        __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+      }
+    }
+    addAudioChunk(sample, meta, timestamp) {
+      if (!(sample instanceof EncodedAudioChunk)) {
+        throw new TypeError("addAudioChunk's first argument (sample) must be of type EncodedAudioChunk.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addAudioChunk's second argument (meta), when provided, must be an object.");
+      }
+      if (timestamp !== void 0 && (!Number.isFinite(timestamp) || timestamp < 0)) {
+        throw new TypeError(
+          "addAudioChunk's third argument (timestamp), when provided, must be a non-negative real number."
+        );
+      }
+      let data = new Uint8Array(sample.byteLength);
+      sample.copyTo(data);
+      this.addAudioChunkRaw(data, sample.type, timestamp ?? sample.timestamp, sample.duration, meta);
+    }
+    addAudioChunkRaw(data, type, timestamp, duration, meta) {
+      if (!(data instanceof Uint8Array)) {
+        throw new TypeError("addAudioChunkRaw's first argument (data) must be an instance of Uint8Array.");
+      }
+      if (type !== "key" && type !== "delta") {
+        throw new TypeError("addAudioChunkRaw's second argument (type) must be either 'key' or 'delta'.");
+      }
+      if (!Number.isFinite(timestamp) || timestamp < 0) {
+        throw new TypeError("addAudioChunkRaw's third argument (timestamp) must be a non-negative real number.");
+      }
+      if (!Number.isFinite(duration) || duration < 0) {
+        throw new TypeError("addAudioChunkRaw's fourth argument (duration) must be a non-negative real number.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addAudioChunkRaw's fifth argument (meta), when provided, must be an object.");
+      }
+      __privateMethod(this, _ensureNotFinalized, ensureNotFinalized_fn).call(this);
+      if (!__privateGet(this, _options).audio)
+        throw new Error("No audio track declared.");
+      if (typeof __privateGet(this, _options).fastStart === "object" && __privateGet(this, _audioTrack).samples.length === __privateGet(this, _options).fastStart.expectedAudioChunks) {
+        throw new Error(`Cannot add more audio chunks than specified in 'fastStart' (${__privateGet(this, _options).fastStart.expectedAudioChunks}).`);
+      }
+      let audioSample = __privateMethod(this, _createSampleForTrack, createSampleForTrack_fn).call(this, __privateGet(this, _audioTrack), data, type, timestamp, duration, meta);
+      if (__privateGet(this, _options).fastStart === "fragmented" && __privateGet(this, _videoTrack)) {
+        while (__privateGet(this, _videoSampleQueue).length > 0 && __privateGet(this, _videoSampleQueue)[0].decodeTimestamp <= audioSample.decodeTimestamp) {
+          let videoSample = __privateGet(this, _videoSampleQueue).shift();
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        }
+        if (audioSample.decodeTimestamp <= __privateGet(this, _videoTrack).lastDecodeTimestamp) {
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        } else {
+          __privateGet(this, _audioSampleQueue).push(audioSample);
+        }
+      } else {
+        __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+      }
+    }
+    /** Finalizes the file, making it ready for use. Must be called after all video and audio chunks have been added. */
+    finalize() {
+      if (__privateGet(this, _finalized)) {
+        throw new Error("Cannot finalize a muxer more than once.");
+      }
+      if (__privateGet(this, _options).fastStart === "fragmented") {
+        for (let videoSample of __privateGet(this, _videoSampleQueue))
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        for (let audioSample of __privateGet(this, _audioSampleQueue))
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        __privateMethod(this, _finalizeFragment, finalizeFragment_fn).call(this, false);
+      } else {
+        if (__privateGet(this, _videoTrack))
+          __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, __privateGet(this, _videoTrack));
+        if (__privateGet(this, _audioTrack))
+          __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, __privateGet(this, _audioTrack));
+      }
+      let tracks = [__privateGet(this, _videoTrack), __privateGet(this, _audioTrack)].filter(Boolean);
+      if (__privateGet(this, _options).fastStart === "in-memory") {
+        let mdatSize;
+        for (let i = 0; i < 2; i++) {
+          let movieBox2 = moov(tracks, __privateGet(this, _creationTime));
+          let movieBoxSize = __privateGet(this, _writer).measureBox(movieBox2);
+          mdatSize = __privateGet(this, _writer).measureBox(__privateGet(this, _mdat));
+          let currentChunkPos = __privateGet(this, _writer).pos + movieBoxSize + mdatSize;
+          for (let chunk of __privateGet(this, _finalizedChunks)) {
+            chunk.offset = currentChunkPos;
+            for (let { data } of chunk.samples) {
+              currentChunkPos += data.byteLength;
+              mdatSize += data.byteLength;
+            }
+          }
+          if (currentChunkPos < 2 ** 32)
+            break;
+          if (mdatSize >= 2 ** 32)
+            __privateGet(this, _mdat).largeSize = true;
+        }
+        let movieBox = moov(tracks, __privateGet(this, _creationTime));
+        __privateGet(this, _writer).writeBox(movieBox);
+        __privateGet(this, _mdat).size = mdatSize;
+        __privateGet(this, _writer).writeBox(__privateGet(this, _mdat));
+        for (let chunk of __privateGet(this, _finalizedChunks)) {
+          for (let sample of chunk.samples) {
+            __privateGet(this, _writer).write(sample.data);
+            sample.data = null;
+          }
+        }
+      } else if (__privateGet(this, _options).fastStart === "fragmented") {
+        let startPos = __privateGet(this, _writer).pos;
+        let mfraBox = mfra(tracks);
+        __privateGet(this, _writer).writeBox(mfraBox);
+        let mfraBoxSize = __privateGet(this, _writer).pos - startPos;
+        __privateGet(this, _writer).seek(__privateGet(this, _writer).pos - 4);
+        __privateGet(this, _writer).writeU32(mfraBoxSize);
+      } else {
+        let mdatPos = __privateGet(this, _writer).offsets.get(__privateGet(this, _mdat));
+        let mdatSize = __privateGet(this, _writer).pos - mdatPos;
+        __privateGet(this, _mdat).size = mdatSize;
+        __privateGet(this, _mdat).largeSize = mdatSize >= 2 ** 32;
+        __privateGet(this, _writer).patchBox(__privateGet(this, _mdat));
+        let movieBox = moov(tracks, __privateGet(this, _creationTime));
+        if (typeof __privateGet(this, _options).fastStart === "object") {
+          __privateGet(this, _writer).seek(__privateGet(this, _ftypSize));
+          __privateGet(this, _writer).writeBox(movieBox);
+          let remainingBytes = mdatPos - __privateGet(this, _writer).pos;
+          __privateGet(this, _writer).writeBox(free(remainingBytes));
+        } else {
+          __privateGet(this, _writer).writeBox(movieBox);
+        }
+      }
+      __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+      __privateGet(this, _writer).finalize();
+      __privateSet(this, _finalized, true);
+    }
+  };
+  _options = new WeakMap();
+  _writer = new WeakMap();
+  _ftypSize = new WeakMap();
+  _mdat = new WeakMap();
+  _videoTrack = new WeakMap();
+  _audioTrack = new WeakMap();
+  _creationTime = new WeakMap();
+  _finalizedChunks = new WeakMap();
+  _nextFragmentNumber = new WeakMap();
+  _videoSampleQueue = new WeakMap();
+  _audioSampleQueue = new WeakMap();
+  _finalized = new WeakMap();
+  _validateOptions = new WeakSet();
+  validateOptions_fn = function(options) {
+    if (typeof options !== "object") {
+      throw new TypeError("The muxer requires an options object to be passed to its constructor.");
+    }
+    if (!(options.target instanceof Target)) {
+      throw new TypeError("The target must be provided and an instance of Target.");
+    }
+    if (options.video) {
+      if (!SUPPORTED_VIDEO_CODECS.includes(options.video.codec)) {
+        throw new TypeError(`Unsupported video codec: ${options.video.codec}`);
+      }
+      if (!Number.isInteger(options.video.width) || options.video.width <= 0) {
+        throw new TypeError(`Invalid video width: ${options.video.width}. Must be a positive integer.`);
+      }
+      if (!Number.isInteger(options.video.height) || options.video.height <= 0) {
+        throw new TypeError(`Invalid video height: ${options.video.height}. Must be a positive integer.`);
+      }
+      const videoRotation = options.video.rotation;
+      if (typeof videoRotation === "number" && ![0, 90, 180, 270].includes(videoRotation)) {
+        throw new TypeError(`Invalid video rotation: ${videoRotation}. Has to be 0, 90, 180 or 270.`);
+      } else if (Array.isArray(videoRotation) && (videoRotation.length !== 9 || videoRotation.some((value) => typeof value !== "number"))) {
+        throw new TypeError(`Invalid video transformation matrix: ${videoRotation.join()}`);
+      }
+      if (options.video.frameRate !== void 0 && (!Number.isInteger(options.video.frameRate) || options.video.frameRate <= 0)) {
+        throw new TypeError(
+          `Invalid video frame rate: ${options.video.frameRate}. Must be a positive integer.`
+        );
+      }
+    }
+    if (options.audio) {
+      if (!SUPPORTED_AUDIO_CODECS.includes(options.audio.codec)) {
+        throw new TypeError(`Unsupported audio codec: ${options.audio.codec}`);
+      }
+      if (!Number.isInteger(options.audio.numberOfChannels) || options.audio.numberOfChannels <= 0) {
+        throw new TypeError(
+          `Invalid number of audio channels: ${options.audio.numberOfChannels}. Must be a positive integer.`
+        );
+      }
+      if (!Number.isInteger(options.audio.sampleRate) || options.audio.sampleRate <= 0) {
+        throw new TypeError(
+          `Invalid audio sample rate: ${options.audio.sampleRate}. Must be a positive integer.`
+        );
+      }
+    }
+    if (options.firstTimestampBehavior && !FIRST_TIMESTAMP_BEHAVIORS.includes(options.firstTimestampBehavior)) {
+      throw new TypeError(`Invalid first timestamp behavior: ${options.firstTimestampBehavior}`);
+    }
+    if (typeof options.fastStart === "object") {
+      if (options.video) {
+        if (options.fastStart.expectedVideoChunks === void 0) {
+          throw new TypeError(`'fastStart' is an object but is missing property 'expectedVideoChunks'.`);
+        } else if (!Number.isInteger(options.fastStart.expectedVideoChunks) || options.fastStart.expectedVideoChunks < 0) {
+          throw new TypeError(`'expectedVideoChunks' must be a non-negative integer.`);
+        }
+      }
+      if (options.audio) {
+        if (options.fastStart.expectedAudioChunks === void 0) {
+          throw new TypeError(`'fastStart' is an object but is missing property 'expectedAudioChunks'.`);
+        } else if (!Number.isInteger(options.fastStart.expectedAudioChunks) || options.fastStart.expectedAudioChunks < 0) {
+          throw new TypeError(`'expectedAudioChunks' must be a non-negative integer.`);
+        }
+      }
+    } else if (![false, "in-memory", "fragmented"].includes(options.fastStart)) {
+      throw new TypeError(`'fastStart' option must be false, 'in-memory', 'fragmented' or an object.`);
+    }
+    if (options.minFragmentDuration !== void 0 && (!Number.isFinite(options.minFragmentDuration) || options.minFragmentDuration < 0)) {
+      throw new TypeError(`'minFragmentDuration' must be a non-negative number.`);
+    }
+  };
+  _writeHeader = new WeakSet();
+  writeHeader_fn = function() {
+    __privateGet(this, _writer).writeBox(ftyp({
+      holdsAvc: __privateGet(this, _options).video?.codec === "avc",
+      fragmented: __privateGet(this, _options).fastStart === "fragmented"
+    }));
+    __privateSet(this, _ftypSize, __privateGet(this, _writer).pos);
+    if (__privateGet(this, _options).fastStart === "in-memory") {
+      __privateSet(this, _mdat, mdat(false));
+    } else if (__privateGet(this, _options).fastStart === "fragmented") {
+    } else {
+      if (typeof __privateGet(this, _options).fastStart === "object") {
+        let moovSizeUpperBound = __privateMethod(this, _computeMoovSizeUpperBound, computeMoovSizeUpperBound_fn).call(this);
+        __privateGet(this, _writer).seek(__privateGet(this, _writer).pos + moovSizeUpperBound);
+      }
+      __privateSet(this, _mdat, mdat(true));
+      __privateGet(this, _writer).writeBox(__privateGet(this, _mdat));
+    }
+    __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+  };
+  _computeMoovSizeUpperBound = new WeakSet();
+  computeMoovSizeUpperBound_fn = function() {
+    if (typeof __privateGet(this, _options).fastStart !== "object")
+      return;
+    let upperBound = 0;
+    let sampleCounts = [
+      __privateGet(this, _options).fastStart.expectedVideoChunks,
+      __privateGet(this, _options).fastStart.expectedAudioChunks
+    ];
+    for (let n of sampleCounts) {
+      if (!n)
+        continue;
+      upperBound += (4 + 4) * Math.ceil(2 / 3 * n);
+      upperBound += 4 * n;
+      upperBound += (4 + 4 + 4) * Math.ceil(2 / 3 * n);
+      upperBound += 4 * n;
+      upperBound += 8 * n;
+    }
+    upperBound += 4096;
+    return upperBound;
+  };
+  _prepareTracks = new WeakSet();
+  prepareTracks_fn = function() {
+    if (__privateGet(this, _options).video) {
+      __privateSet(this, _videoTrack, {
+        id: 1,
+        info: {
+          type: "video",
+          codec: __privateGet(this, _options).video.codec,
+          width: __privateGet(this, _options).video.width,
+          height: __privateGet(this, _options).video.height,
+          rotation: __privateGet(this, _options).video.rotation ?? 0,
+          decoderConfig: null
+        },
+        // The fallback contains many common frame rates as factors
+        timescale: __privateGet(this, _options).video.frameRate ?? 57600,
+        samples: [],
+        finalizedChunks: [],
+        currentChunk: null,
+        firstDecodeTimestamp: void 0,
+        lastDecodeTimestamp: -1,
+        timeToSampleTable: [],
+        compositionTimeOffsetTable: [],
+        lastTimescaleUnits: null,
+        lastSample: null,
+        compactlyCodedChunkTable: []
+      });
+    }
+    if (__privateGet(this, _options).audio) {
+      __privateSet(this, _audioTrack, {
+        id: __privateGet(this, _options).video ? 2 : 1,
+        info: {
+          type: "audio",
+          codec: __privateGet(this, _options).audio.codec,
+          numberOfChannels: __privateGet(this, _options).audio.numberOfChannels,
+          sampleRate: __privateGet(this, _options).audio.sampleRate,
+          decoderConfig: null
+        },
+        timescale: __privateGet(this, _options).audio.sampleRate,
+        samples: [],
+        finalizedChunks: [],
+        currentChunk: null,
+        firstDecodeTimestamp: void 0,
+        lastDecodeTimestamp: -1,
+        timeToSampleTable: [],
+        compositionTimeOffsetTable: [],
+        lastTimescaleUnits: null,
+        lastSample: null,
+        compactlyCodedChunkTable: []
+      });
+      if (__privateGet(this, _options).audio.codec === "aac") {
+        let guessedCodecPrivate = __privateMethod(this, _generateMpeg4AudioSpecificConfig, generateMpeg4AudioSpecificConfig_fn).call(
+          this,
+          2,
+          // Object type for AAC-LC, since it's the most common
+          __privateGet(this, _options).audio.sampleRate,
+          __privateGet(this, _options).audio.numberOfChannels
+        );
+        __privateGet(this, _audioTrack).info.decoderConfig = {
+          codec: __privateGet(this, _options).audio.codec,
+          description: guessedCodecPrivate,
+          numberOfChannels: __privateGet(this, _options).audio.numberOfChannels,
+          sampleRate: __privateGet(this, _options).audio.sampleRate
+        };
+      }
+    }
+  };
+  _generateMpeg4AudioSpecificConfig = new WeakSet();
+  generateMpeg4AudioSpecificConfig_fn = function(objectType, sampleRate, numberOfChannels) {
+    let frequencyIndices = [96e3, 88200, 64e3, 48e3, 44100, 32e3, 24e3, 22050, 16e3, 12e3, 11025, 8e3, 7350];
+    let frequencyIndex = frequencyIndices.indexOf(sampleRate);
+    let channelConfig = numberOfChannels;
+    let configBits = "";
+    configBits += objectType.toString(2).padStart(5, "0");
+    configBits += frequencyIndex.toString(2).padStart(4, "0");
+    if (frequencyIndex === 15)
+      configBits += sampleRate.toString(2).padStart(24, "0");
+    configBits += channelConfig.toString(2).padStart(4, "0");
+    let paddingLength = Math.ceil(configBits.length / 8) * 8;
+    configBits = configBits.padEnd(paddingLength, "0");
+    let configBytes = new Uint8Array(configBits.length / 8);
+    for (let i = 0; i < configBits.length; i += 8) {
+      configBytes[i / 8] = parseInt(configBits.slice(i, i + 8), 2);
+    }
+    return configBytes;
+  };
+  _createSampleForTrack = new WeakSet();
+  createSampleForTrack_fn = function(track, data, type, timestamp, duration, meta, compositionTimeOffset) {
+    let presentationTimestampInSeconds = timestamp / 1e6;
+    let decodeTimestampInSeconds = (timestamp - (compositionTimeOffset ?? 0)) / 1e6;
+    let durationInSeconds = duration / 1e6;
+    let adjusted = __privateMethod(this, _validateTimestamp, validateTimestamp_fn).call(this, presentationTimestampInSeconds, decodeTimestampInSeconds, track);
+    presentationTimestampInSeconds = adjusted.presentationTimestamp;
+    decodeTimestampInSeconds = adjusted.decodeTimestamp;
+    if (meta?.decoderConfig) {
+      if (track.info.decoderConfig === null) {
+        track.info.decoderConfig = meta.decoderConfig;
+      } else {
+        Object.assign(track.info.decoderConfig, meta.decoderConfig);
+      }
+    }
+    let sample = {
+      presentationTimestamp: presentationTimestampInSeconds,
+      decodeTimestamp: decodeTimestampInSeconds,
+      duration: durationInSeconds,
+      data,
+      size: data.byteLength,
+      type,
+      // Will be refined once the next sample comes in
+      timescaleUnitsToNextSample: intoTimescale(durationInSeconds, track.timescale)
+    };
+    return sample;
+  };
+  _addSampleToTrack = new WeakSet();
+  addSampleToTrack_fn = function(track, sample) {
+    if (__privateGet(this, _options).fastStart !== "fragmented") {
+      track.samples.push(sample);
+    }
+    const sampleCompositionTimeOffset = intoTimescale(sample.presentationTimestamp - sample.decodeTimestamp, track.timescale);
+    if (track.lastTimescaleUnits !== null) {
+      let timescaleUnits = intoTimescale(sample.decodeTimestamp, track.timescale, false);
+      let delta = Math.round(timescaleUnits - track.lastTimescaleUnits);
+      track.lastTimescaleUnits += delta;
+      track.lastSample.timescaleUnitsToNextSample = delta;
+      if (__privateGet(this, _options).fastStart !== "fragmented") {
+        let lastTableEntry = last(track.timeToSampleTable);
+        if (lastTableEntry.sampleCount === 1) {
+          lastTableEntry.sampleDelta = delta;
+          lastTableEntry.sampleCount++;
+        } else if (lastTableEntry.sampleDelta === delta) {
+          lastTableEntry.sampleCount++;
+        } else {
+          lastTableEntry.sampleCount--;
+          track.timeToSampleTable.push({
+            sampleCount: 2,
+            sampleDelta: delta
+          });
+        }
+        const lastCompositionTimeOffsetTableEntry = last(track.compositionTimeOffsetTable);
+        if (lastCompositionTimeOffsetTableEntry.sampleCompositionTimeOffset === sampleCompositionTimeOffset) {
+          lastCompositionTimeOffsetTableEntry.sampleCount++;
+        } else {
+          track.compositionTimeOffsetTable.push({
+            sampleCount: 1,
+            sampleCompositionTimeOffset
+          });
+        }
+      }
+    } else {
+      track.lastTimescaleUnits = 0;
+      if (__privateGet(this, _options).fastStart !== "fragmented") {
+        track.timeToSampleTable.push({
+          sampleCount: 1,
+          sampleDelta: intoTimescale(sample.duration, track.timescale)
+        });
+        track.compositionTimeOffsetTable.push({
+          sampleCount: 1,
+          sampleCompositionTimeOffset
+        });
+      }
+    }
+    track.lastSample = sample;
+    let beginNewChunk = false;
+    if (!track.currentChunk) {
+      beginNewChunk = true;
+    } else {
+      let currentChunkDuration = sample.presentationTimestamp - track.currentChunk.startTimestamp;
+      if (__privateGet(this, _options).fastStart === "fragmented") {
+        let mostImportantTrack = __privateGet(this, _videoTrack) ?? __privateGet(this, _audioTrack);
+        const chunkDuration = __privateGet(this, _options).minFragmentDuration ?? 1;
+        if (track === mostImportantTrack && sample.type === "key" && currentChunkDuration >= chunkDuration) {
+          beginNewChunk = true;
+          __privateMethod(this, _finalizeFragment, finalizeFragment_fn).call(this);
+        }
+      } else {
+        beginNewChunk = currentChunkDuration >= 0.5;
+      }
+    }
+    if (beginNewChunk) {
+      if (track.currentChunk) {
+        __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, track);
+      }
+      track.currentChunk = {
+        startTimestamp: sample.presentationTimestamp,
+        samples: []
+      };
+    }
+    track.currentChunk.samples.push(sample);
+  };
+  _validateTimestamp = new WeakSet();
+  validateTimestamp_fn = function(presentationTimestamp, decodeTimestamp, track) {
+    const strictTimestampBehavior = __privateGet(this, _options).firstTimestampBehavior === "strict";
+    const noLastDecodeTimestamp = track.lastDecodeTimestamp === -1;
+    const timestampNonZero = decodeTimestamp !== 0;
+    if (strictTimestampBehavior && noLastDecodeTimestamp && timestampNonZero) {
+      throw new Error(
+        `The first chunk for your media track must have a timestamp of 0 (received DTS=${decodeTimestamp}).Non-zero first timestamps are often caused by directly piping frames or audio data from a MediaStreamTrack into the encoder. Their timestamps are typically relative to the age of thedocument, which is probably what you want.
+
+If you want to offset all timestamps of a track such that the first one is zero, set firstTimestampBehavior: 'offset' in the options.
+`
+      );
+    } else if (__privateGet(this, _options).firstTimestampBehavior === "offset" || __privateGet(this, _options).firstTimestampBehavior === "cross-track-offset") {
+      if (track.firstDecodeTimestamp === void 0) {
+        track.firstDecodeTimestamp = decodeTimestamp;
+      }
+      let baseDecodeTimestamp;
+      if (__privateGet(this, _options).firstTimestampBehavior === "offset") {
+        baseDecodeTimestamp = track.firstDecodeTimestamp;
+      } else {
+        baseDecodeTimestamp = Math.min(
+          __privateGet(this, _videoTrack)?.firstDecodeTimestamp ?? Infinity,
+          __privateGet(this, _audioTrack)?.firstDecodeTimestamp ?? Infinity
+        );
+      }
+      decodeTimestamp -= baseDecodeTimestamp;
+      presentationTimestamp -= baseDecodeTimestamp;
+    }
+    if (decodeTimestamp < track.lastDecodeTimestamp) {
+      throw new Error(
+        `Timestamps must be monotonically increasing (DTS went from ${track.lastDecodeTimestamp * 1e6} to ${decodeTimestamp * 1e6}).`
+      );
+    }
+    track.lastDecodeTimestamp = decodeTimestamp;
+    return { presentationTimestamp, decodeTimestamp };
+  };
+  _finalizeCurrentChunk = new WeakSet();
+  finalizeCurrentChunk_fn = function(track) {
+    if (__privateGet(this, _options).fastStart === "fragmented") {
+      throw new Error("Can't finalize individual chunks if 'fastStart' is set to 'fragmented'.");
+    }
+    if (!track.currentChunk)
+      return;
+    track.finalizedChunks.push(track.currentChunk);
+    __privateGet(this, _finalizedChunks).push(track.currentChunk);
+    if (track.compactlyCodedChunkTable.length === 0 || last(track.compactlyCodedChunkTable).samplesPerChunk !== track.currentChunk.samples.length) {
+      track.compactlyCodedChunkTable.push({
+        firstChunk: track.finalizedChunks.length,
+        // 1-indexed
+        samplesPerChunk: track.currentChunk.samples.length
+      });
+    }
+    if (__privateGet(this, _options).fastStart === "in-memory") {
+      track.currentChunk.offset = 0;
+      return;
+    }
+    track.currentChunk.offset = __privateGet(this, _writer).pos;
+    for (let sample of track.currentChunk.samples) {
+      __privateGet(this, _writer).write(sample.data);
+      sample.data = null;
+    }
+    __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+  };
+  _finalizeFragment = new WeakSet();
+  finalizeFragment_fn = function(flushStreamingWriter = true) {
+    if (__privateGet(this, _options).fastStart !== "fragmented") {
+      throw new Error("Can't finalize a fragment unless 'fastStart' is set to 'fragmented'.");
+    }
+    let tracks = [__privateGet(this, _videoTrack), __privateGet(this, _audioTrack)].filter((track) => track && track.currentChunk);
+    if (tracks.length === 0)
+      return;
+    let fragmentNumber = __privateWrapper(this, _nextFragmentNumber)._++;
+    if (fragmentNumber === 1) {
+      let movieBox = moov(tracks, __privateGet(this, _creationTime), true);
+      __privateGet(this, _writer).writeBox(movieBox);
+    }
+    let moofOffset = __privateGet(this, _writer).pos;
+    let moofBox = moof(fragmentNumber, tracks);
+    __privateGet(this, _writer).writeBox(moofBox);
+    {
+      let mdatBox = mdat(false);
+      let totalTrackSampleSize = 0;
+      for (let track of tracks) {
+        for (let sample of track.currentChunk.samples) {
+          totalTrackSampleSize += sample.size;
+        }
+      }
+      let mdatSize = __privateGet(this, _writer).measureBox(mdatBox) + totalTrackSampleSize;
+      if (mdatSize >= 2 ** 32) {
+        mdatBox.largeSize = true;
+        mdatSize = __privateGet(this, _writer).measureBox(mdatBox) + totalTrackSampleSize;
+      }
+      mdatBox.size = mdatSize;
+      __privateGet(this, _writer).writeBox(mdatBox);
+    }
+    for (let track of tracks) {
+      track.currentChunk.offset = __privateGet(this, _writer).pos;
+      track.currentChunk.moofOffset = moofOffset;
+      for (let sample of track.currentChunk.samples) {
+        __privateGet(this, _writer).write(sample.data);
+        sample.data = null;
+      }
+    }
+    let endPos = __privateGet(this, _writer).pos;
+    __privateGet(this, _writer).seek(__privateGet(this, _writer).offsets.get(moofBox));
+    let newMoofBox = moof(fragmentNumber, tracks);
+    __privateGet(this, _writer).writeBox(newMoofBox);
+    __privateGet(this, _writer).seek(endPos);
+    for (let track of tracks) {
+      track.finalizedChunks.push(track.currentChunk);
+      __privateGet(this, _finalizedChunks).push(track.currentChunk);
+      track.currentChunk = null;
+    }
+    if (flushStreamingWriter) {
+      __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+    }
+  };
+  _maybeFlushStreamingTargetWriter = new WeakSet();
+  maybeFlushStreamingTargetWriter_fn = function() {
+    if (__privateGet(this, _writer) instanceof StreamTargetWriter) {
+      __privateGet(this, _writer).flush();
+    }
+  };
+  _ensureNotFinalized = new WeakSet();
+  ensureNotFinalized_fn = function() {
+    if (__privateGet(this, _finalized)) {
+      throw new Error("Cannot add new video or audio chunks after the file has been finalized.");
+    }
+  };
+  return __toCommonJS(src_exports);
+})();
+if (typeof module === "object" && typeof module.exports === "object") Object.assign(module.exports, Mp4Muxer)
+
+</script>
+
+<script>
+"use strict";
+document.addEventListener('DOMContentLoaded', () => {
+
+/* ============================================================
+   CONSTANTS
+   ============================================================ */
+const MODES = { NORMAL:'normal', SPLIT:'split', PIP:'pip' };
+const RES   = { '720p':720, '1080p':1080, '1440p':1440, '4K':2160 };
+const ARS   = { '9:16':[9,16], '16:9':[16,9], '1:1':[1,1], '4:3':[4,3] };
+const TARGET_FPS = 30;
+const FRAME_MS = 1000 / TARGET_FPS;
+// While a take is rolling, draw the canvas at a lower rate to free up CPU/GPU
+// on long recordings. The canvas IS the recorded surface, so recorded motion
+// is capped at this rate too.
+const RECORD_FPS = 24;                   // Split/PiP canvas-record rate (talking-head smoothness vs GPU)
+const RECORD_FRAME_MS = 1000 / RECORD_FPS;
+// The LIVE preview canvas renders at a capped short-side resolution. Drawing a
+// full 1440p/4K canvas every frame just to show an on-screen preview is the
+// single biggest waste. Normal records the raw camera track (canvas never in the
+// record path), and Split/PiP swap UP to full output res only while recording,
+// so nothing about EXPORT quality changes.
+const PREVIEW_CAP = 720;
+const MAX_REC_MS = 30 * 60 * 1000;       // 30 minutes
+const WARN_4K_SECONDS = 120;             // warn for long 4K timelines
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const fmt = s => { s=Math.max(0,s||0); const m=Math.floor(s/60); const sec=Math.floor(s%60); return m+':'+String(sec).padStart(2,'0'); };
+const fmt2 = s => (Math.max(0,s||0)).toFixed(2);
+
+/* ============================================================
+   SINGLE STATE OBJECT — every flag declared + initialized.
+   No flag is ever allowed to be `undefined` and used as a gate.
+   ============================================================ */
+const S = {
+  mode: MODES.NORMAL,
+  ar: '9:16',
+  res: '1080p',
+  expRes: '1080p',
+  expBitrate: 16,               // export video bitrate in Mbps (MediaRecorder default is far too low)
+
+  camReady: false,
+  mirror: false,
+  fit: 'contain',               // 'cover' | 'contain' — default Fit (whole picture, never cropped)
+  camScale: 1,
+  camPanX: 0, camPanY: 0,       // -1..1
+
+  // filters (raw slider values)
+  f: { brightness:100, contrast:100, saturate:100, hue:0, temp:0, exposure:0, blur:0, sharpen:0 },
+  filterStr: 'none',            // cached composed string
+  filtersDefault: true,         // cached boolean, COMPUTED — never undefined
+
+  splitDivider: 0.5,
+  splitTopPanX:0, splitTopPanY:0,
+  splitBotPanX:0, splitBotPanY:0,
+
+  pip: { x:0.05, y:0.05, w:0.30, ar:'auto', radius:0.12 },
+
+  hasMedia:false, mediaKind:null,    // 'image' | 'video'
+  importPlaying:false,
+  micEnabled:true,
+  micVol:1, importVol:1,
+
+  recording:false,
+  recStart:0,
+
+  clips:[],
+  editOpen:false,
+  recRAF:0, editRAF:0,
+};
+
+/* ============================================================
+   DOM REFS
+   ============================================================ */
+const canvas   = $('canvas');
+const ctx      = canvas.getContext('2d', { alpha:false });
+const camVid   = $('cam-vid');
+const importVid= $('import-vid');
+const exCanvas = $('export-canvas');
+const exCtx    = exCanvas.getContext('2d', { alpha:false });
+const workCv   = $('work-canvas');
+const workCtx  = workCv.getContext('2d');
+const stage    = $('stage');
+
+let canvasDims = { w:1080, h:1920 };
+let S_snapGuides = [];          // active snap guide lines drawn while dragging
+let stageRect  = null;          // cached bounding rect of canvas (NEVER read in RAF)
+let lastFrameTime = 0;
+
+/* ============================================================
+   CAMERA
+   ============================================================ */
+let micStream = null;
+
+async function startCamera(){
+  const V = RES[S.res];
+  try {
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    // Request the camera at its NATIVE ratio (landscape), NOT the output AR.
+    // Tying the request to a 9:16 output made the browser crop the sensor to
+    // 9:16 before it reached the canvas. We ask for a landscape frame at the
+    // chosen quality (short side = V) and let the webcam deliver its own
+    // native aspect ratio; the canvas then frames the full picture.
+    micStream = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ ideal: Math.round(V*16/9) }, height:{ ideal: V } },
+      audio: { echoCancellation:true, noiseSuppression:true }
+    });
+    camVid.srcObject = micStream;
+    await camVid.play().catch(()=>{});
+    // restore mic enabled state on new track
+    const at = micStream.getAudioTracks()[0];
+    if (at) at.enabled = S.micEnabled;
+    S.camReady = true;
+    $('stage-empty').style.display = 'none';
+    // reconnect mic into audio graph if it already exists
+    reconnectMic();
+    updateActualRes();
+  } catch (err) {
+    toast('Camera/mic blocked. Grant permission and reload. Needs https or localhost.', true);
+    console.error(err);
+  }
+}
+
+function updateActualRes(){
+  if (camVid.videoWidth) $('actual-res').textContent = camVid.videoWidth+'×'+camVid.videoHeight+' cam';
+}
+
+/* ============================================================
+   OUTPUT DIMENSIONS  (short side = quality preset)
+   ============================================================ */
+function outputDims(resKey){
+  const V = RES[resKey];
+  const [a,b] = ARS[S.ar];
+  const ratio = Math.max(a,b)/Math.min(a,b);
+  return (a <= b)
+    ? { w:Math.round(V), h:Math.round(V*ratio) }   // portrait / square
+    : { w:Math.round(V*ratio), h:Math.round(V) };  // landscape
+}
+function applyOutputDims(){
+  // Live preview uses the capped size; recording in a canvas mode (Split/PiP)
+  // swaps up to full output res via setCanvasDims in startRecording.
+  setCanvasDims((S.recording && S.mode !== MODES.NORMAL) ? outputDims(S.res) : previewDims());
+}
+// Capped preview dimensions: scale the true output down so its short side is
+// <= PREVIEW_CAP, preserving aspect. All on-canvas geometry is normalized, so
+// this is purely a pixel-count reduction with no effect on framing or export.
+function previewDims(){
+  const full = outputDims(S.res);
+  const short = Math.min(full.w, full.h);
+  if (short <= PREVIEW_CAP) return full;
+  const k = PREVIEW_CAP / short;
+  return { w: Math.round(full.w * k), h: Math.round(full.h * k) };
+}
+function setCanvasDims(dims){
+  canvasDims = dims;
+  canvas.width = dims.w;
+  canvas.height = dims.h;
+  invalidateRect();
+}
+
+/* ============================================================
+   FILTERS — cached string + computed default flag
+   Rebuilt ONLY when a slider changes. drawCam reads the cache.
+   ============================================================ */
+function rebuildFilters(){
+  const f = S.f;
+  S.filtersDefault =
+    f.brightness===100 && f.contrast===100 && f.saturate===100 &&
+    f.hue===0 && f.temp===0 && f.exposure===0 && f.blur===0 && f.sharpen===0;
+
+  if (S.filtersDefault){ S.filterStr = 'none'; return; }
+
+  const bright = clamp(f.brightness + f.exposure, 0, 300) / 100;
+  const parts = [];
+  parts.push('brightness('+bright.toFixed(3)+')');
+  parts.push('contrast('+(f.contrast/100).toFixed(3)+')');
+  parts.push('saturate('+(f.saturate/100).toFixed(3)+')');
+  // temperature shifts hue (warm = +, cool = -); fold into hue-rotate
+  const hue = f.hue + (f.temp * 0.3);
+  if (hue !== 0) parts.push('hue-rotate('+hue.toFixed(1)+'deg)');
+  // temperature also nudges saturation slightly for a warmer feel
+  if (f.temp > 0) parts.push('sepia('+(f.temp*0.12/100).toFixed(3)+')');
+  if (f.blur > 0) parts.push('blur('+f.blur+'px)');
+  if (f.sharpen > 0){
+    const k = f.sharpen/100 * 2;
+    $('mc-sharpen-k').setAttribute('kernelMatrix',
+      `0 ${-k} 0 ${-k} ${1+4*k} ${-k} 0 ${-k} 0`);
+    parts.push('url(#mc-sharpen)');
+  }
+  S.filterStr = parts.join(' ');
+}
+
+/* ============================================================
+   CORE DRAW — one drawCam used by every mode.
+   Cover/contain crop + zoom + pan + mirror + filters, all in a
+   save/restore scope so ctx.filter & transforms auto-reset.
+   No geometry caching: recomputed each call (cheap, bug-proof).
+   ============================================================ */
+function drawCam(dx, dy, dw, dh, opt){
+  const sw = camVid.videoWidth, sh = camVid.videoHeight;
+  if (!sw || !sh) return;
+  const fit    = opt.fit    || S.fit;
+  const scale  = opt.scale  != null ? opt.scale : 1;
+  const panX   = opt.panX   || 0;
+  const panY   = opt.panY   || 0;
+  const mirror = opt.mirror != null ? opt.mirror : S.mirror;
+  const radius = opt.radius || 0;
+  const useFilter = opt.filter !== false && !S.filtersDefault;
+
+  ctx.save();
+
+  // Always clip to the destination region so the freely-moved
+  // picture never spills outside its frame / into a neighbouring
+  // region (split, pip). In NORMAL mode this rect == the canvas.
+  if (radius > 0){ roundRectPath(ctx, dx, dy, dw, dh, radius); ctx.clip(); }
+  else          { ctx.beginPath(); ctx.rect(dx, dy, dw, dh); ctx.clip(); }
+
+  if (useFilter) ctx.filter = S.filterStr;
+
+  // FULL-PICTURE model: the ENTIRE webcam frame is drawn as a single
+  // object with its native aspect ratio preserved — never source-cropped.
+  //   fit 'cover'   → baseline scale fills the region (edges may extend past)
+  //   fit 'contain' → baseline scale fits the whole picture inside the region
+  // Zoom multiplies that baseline; pan translates the whole picture freely.
+  const baseScale = (fit === 'contain')
+    ? Math.min(dw/sw, dh/sh)
+    : Math.max(dw/sw, dh/sh);
+  const s = baseScale * scale;
+  const drawW = sw * s, drawH = sh * s;
+
+  // pan is -1..1; freedom lets you slide the picture to either edge (and a
+  // touch beyond in cover), so any part of the frame can be brought in.
+  const freedomX = Math.max(drawW, dw) / 2;
+  const freedomY = Math.max(drawH, dh) / 2;
+  const cx = dx + dw/2 + panX * freedomX;   // picture centre x
+  const cy = dy + dh/2 + panY * freedomY;   // picture centre y
+  const ox = cx - drawW/2;
+  const oy = cy - drawH/2;
+
+  if (mirror){
+    // flip horizontally about the picture's own centre
+    ctx.translate(cx*2, 0); ctx.scale(-1, 1);
+  }
+  ctx.drawImage(camVid, ox, oy, drawW, drawH);
+  ctx.restore();
+}
+
+/* ============================================================
+   compositeCam — standalone version of drawCam's full-picture math
+   for the EDITOR PREVIEW and EXPORT of "raw" clips (clips recorded
+   straight from the camera, with the look applied at playback time
+   instead of baked in). Mirrors drawCam exactly so preview == export.
+     c    : target 2D context
+     src  : source <video> (or image with videoWidth/Height shims)
+     look : { fit, scale, panX, panY, mirror, filterStr }
+   ============================================================ */
+function compositeCam(c, src, dx, dy, dw, dh, look){
+  const sw = src.videoWidth, sh = src.videoHeight;
+  if (!sw || !sh) return;
+  look = look || {};
+  const fit    = look.fit    || 'contain';
+  const scale  = look.scale  != null ? look.scale : 1;
+  const panX   = look.panX   || 0;
+  const panY   = look.panY   || 0;
+  const mirror = !!look.mirror;
+  const filterStr = look.filterStr;
+
+  c.save();
+  c.beginPath(); c.rect(dx, dy, dw, dh); c.clip();
+  if (filterStr && filterStr !== 'none') c.filter = filterStr;
+
+  const base = (fit === 'contain') ? Math.min(dw/sw, dh/sh) : Math.max(dw/sw, dh/sh);
+  const s = base * scale;
+  const drawW = sw*s, drawH = sh*s;
+  const freedomX = Math.max(drawW, dw) / 2;
+  const freedomY = Math.max(drawH, dh) / 2;
+  const cx = dx + dw/2 + panX * freedomX;
+  const cy = dy + dh/2 + panY * freedomY;
+  const ox = cx - drawW/2, oy = cy - drawH/2;
+  if (mirror){ c.translate(cx*2, 0); c.scale(-1, 1); }
+  c.drawImage(src, ox, oy, drawW, drawH);
+  c.restore();
+}
+
+/* snapshot the live look so a raw clip can be re-composited later */
+function snapshotLook(){
+  return {
+    fit: S.fit,
+    scale: S.camScale,
+    panX: S.camPanX,
+    panY: S.camPanY,
+    mirror: S.mirror,
+    filterStr: S.filtersDefault ? 'none' : S.filterStr,
+  };
+}
+
+function roundRectPath(c, x, y, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  c.beginPath();
+  c.moveTo(x+r, y);
+  c.arcTo(x+w, y,   x+w, y+h, r);
+  c.arcTo(x+w, y+h, x,   y+h, r);
+  c.arcTo(x,   y+h, x,   y,   r);
+  c.arcTo(x,   y,   x+w, y,   r);
+  c.closePath();
+}
+
+/* ============================================================
+   SNAP-TO-GRID for the full-picture cam.
+   Given a destination region + current fit/scale, snaps the
+   moving picture's left/centre/right edges to the region's
+   left/centre/right (and top/centre/bottom). In SPLIT the region
+   passed is that half, so it snaps within its own half. Holding
+   Alt while dragging bypasses snapping for fine control.
+   ============================================================ */
+function camPicSize(dw, dh, fit, scale){
+  const sw = camVid.videoWidth, sh = camVid.videoHeight;
+  if (!sw || !sh) return { drawW: dw, drawH: dh };
+  const base = (fit === 'contain') ? Math.min(dw/sw, dh/sh) : Math.max(dw/sw, dh/sh);
+  const s = base * scale;
+  return { drawW: sw*s, drawH: sh*s };
+}
+// snap fraction of the shorter region side
+const SNAP_FRAC = 0.025;
+function snapCamPan(panX, panY, dx, dy, dw, dh, fit, scale, noSnap){
+  S_snapGuides = [];
+  const { drawW, drawH } = camPicSize(dw, dh, fit, scale);
+  const freedomX = Math.max(drawW, dw) / 2;
+  const freedomY = Math.max(drawH, dh) / 2;
+  const thr = Math.min(dw, dh) * SNAP_FRAC;
+
+  const cxNow = dx + dw/2 + panX * freedomX;
+  const cyNow = dy + dh/2 + panY * freedomY;
+
+  // candidate centre positions that align an edge or the middle
+  const xTargets = [
+    { cx: dx + drawW/2,        guide: dx        },  // left flush
+    { cx: dx + dw/2,           guide: dx + dw/2 },  // centred
+    { cx: dx + dw - drawW/2,   guide: dx + dw   },  // right flush
+  ];
+  const yTargets = [
+    { cy: dy + drawH/2,        guide: dy        },  // top flush
+    { cy: dy + dh/2,           guide: dy + dh/2 },  // centred
+    { cy: dy + dh - drawH/2,   guide: dy + dh   },  // bottom flush
+  ];
+
+  let outX = panX, outY = panY;
+  if (!noSnap){
+    for (const t of xTargets){
+      if (Math.abs(cxNow - t.cx) < thr){
+        outX = freedomX ? (t.cx - (dx+dw/2)) / freedomX : 0;
+        S_snapGuides.push({ axis:'x', pos: t.guide });
+        break;
+      }
+    }
+    for (const t of yTargets){
+      if (Math.abs(cyNow - t.cy) < thr){
+        outY = freedomY ? (t.cy - (dy+dh/2)) / freedomY : 0;
+        S_snapGuides.push({ axis:'y', pos: t.guide });
+        break;
+      }
+    }
+  }
+  return { x: clamp(outX, -1, 1), y: clamp(outY, -1, 1) };
+}
+
+/* snap a PiP box (normalized x,y) so its edges/centre align to the
+   canvas edges/centre. Returns possibly-adjusted {x,y} and sets guides. */
+function snapPipBox(nx, ny){
+  S_snapGuides = [];
+  const { w, h } = canvasDims;
+  const box = pipBoxAt(nx, ny);                 // px geometry at proposed pos
+  const thr = Math.min(w, h) * SNAP_FRAC;
+  let px = nx * w, py = ny * h;
+
+  const xEdges = [
+    { val: 0,            box: box.x },                 // left
+    { val: w/2 - box.w/2,box: box.x + box.w/2, c:w/2 },// centre
+    { val: w - box.w,    box: box.x + box.w },         // right
+  ];
+  const yEdges = [
+    { val: 0,            box: box.y },
+    { val: h/2 - box.h/2,box: box.y + box.h/2, c:h/2 },
+    { val: h - box.h,    box: box.y + box.h },
+  ];
+  for (const e of xEdges){
+    if (Math.abs(px - e.val) < thr){ px = e.val; S_snapGuides.push({ axis:'x', pos: e.c != null ? e.c : (e.val < w/2 ? 0 : w) }); break; }
+  }
+  for (const e of yEdges){
+    if (Math.abs(py - e.val) < thr){ py = e.val; S_snapGuides.push({ axis:'y', pos: e.c != null ? e.c : (e.val < h/2 ? 0 : h) }); break; }
+  }
+  return { x: px / w, y: py / h };
+}
+
+/* draw active snap guide lines (only while dragging, never recorded
+   during an active take). */
+function drawSnapGuides(){
+  if (!drag || S.recording || !S_snapGuides.length) return;
+  const { w, h } = canvasDims;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,59,71,.9)';     // brand crimson guide
+  ctx.lineWidth = Math.max(2, Math.round(Math.min(w,h) * 0.004));
+  ctx.setLineDash([Math.round(h*0.012), Math.round(h*0.012)]);
+  for (const g of S_snapGuides){
+    ctx.beginPath();
+    if (g.axis === 'x'){ ctx.moveTo(g.pos, 0); ctx.lineTo(g.pos, h); }
+    else               { ctx.moveTo(0, g.pos); ctx.lineTo(w, g.pos); }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* draw imported media (image static / video frame) covering a region */
+function drawMedia(dx, dy, dw, dh, panX, panY){
+  if (!S.hasMedia) { ctx.fillStyle = '#0e0e10'; ctx.fillRect(dx,dy,dw,dh); return; }
+  let src, sw, sh;
+  if (S.mediaKind === 'image'){ src = importImg; sw = importImg.naturalWidth; sh = importImg.naturalHeight; }
+  else { src = importVid; sw = importVid.videoWidth; sh = importVid.videoHeight; }
+  if (!sw || !sh){ ctx.fillStyle = '#0e0e10'; ctx.fillRect(dx,dy,dw,dh); return; }
+  const srcScale = Math.max(dw/sw, dh/sh);
+  const cropW = dw/srcScale, cropH = dh/srcScale;
+  let cropX = (sw-cropW)/2 * (1 + (panX||0));
+  let cropY = (sh-cropH)/2 * (1 + (panY||0));
+  cropX = clamp(cropX, 0, sw-cropW);
+  cropY = clamp(cropY, 0, sh-cropH);
+  ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
+}
+
+/* ============================================================
+   MODE DRAW FUNCTIONS — one each, no scattered if(mode===)
+   ============================================================ */
+function draw_normal(){
+  drawCam(0, 0, canvasDims.w, canvasDims.h, { panX:S.camPanX, panY:S.camPanY });
+}
+function draw_split(){
+  const { w, h } = canvasDims;
+  const divY = Math.round(h * S.splitDivider);
+  drawMedia(0, 0, w, divY, S.splitTopPanX, S.splitTopPanY);          // top = imported
+  drawCam(0, divY, w, h - divY, { panX:S.splitBotPanX, panY:S.splitBotPanY }); // bottom = cam
+  // divider line
+  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.fillRect(0, divY-1, w, 2);
+}
+function draw_pip(){
+  const { w, h } = canvasDims;
+  drawMedia(0, 0, w, h, 0, 0);                  // imported fills canvas
+  const box = pipBox();
+  // subtle shadow behind the box
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = '#000';
+  roundRectPath(ctx, box.x, box.y, box.w, box.h, box.r); ctx.fill();
+  ctx.restore();
+  drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r }); // cover-cropped cam
+}
+
+/* compute pip box in canvas px from normalized state */
+function pipBoxAt(nx, ny){
+  const { w, h } = canvasDims;
+  const boxW = w * S.pip.w;
+  let boxAR;
+  if (S.pip.ar === 'auto'){
+    const cw = camVid.videoWidth || 16, ch = camVid.videoHeight || 9;
+    boxAR = cw/ch;
+  } else {
+    const [a,b] = S.pip.ar.split(':').map(Number); boxAR = a/b;
+  }
+  const boxH = boxW / boxAR;
+  const x = clamp(nx * w, 0, w - boxW);
+  const y = clamp(ny * h, 0, h - boxH);
+  const r = Math.min(boxW, boxH) * S.pip.radius;
+  return { x, y, w:boxW, h:boxH, r };
+}
+function pipBox(){ return pipBoxAt(S.pip.x, S.pip.y); }
+
+/* ============================================================
+   RENDER LOOP — 30fps throttled. Clears + redraws every frame.
+   Gated entirely by S.editOpen (stops when editor is open).
+   ============================================================ */
+function drawFrame(){
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvasDims.w, canvasDims.h);
+  if (S.mode === MODES.NORMAL) draw_normal();
+  else if (S.mode === MODES.SPLIT) draw_split();
+  else draw_pip();
+  drawSnapGuides();
+}
+
+function renderLoop(now){
+  if (S.editOpen) return;                 // hard gate — editor owns the screen
+  S.recRAF = requestAnimationFrame(renderLoop);
+  // Throttle ONLY when the canvas is the recording surface (Split/PiP). Normal
+  // records the raw camera track, so its preview can stay at full smoothness.
+  const interval = (S.recording && S.mode !== MODES.NORMAL) ? RECORD_FRAME_MS : FRAME_MS;
+  if (now - lastFrameTime < interval) return;
+  lastFrameTime = now;
+  drawFrame();
+  if (S.recording) updateRecTimer();
+}
+function startRenderLoop(){
+  if (S.recRAF) return;
+  lastFrameTime = 0;
+  S.recRAF = requestAnimationFrame(renderLoop);
+}
+function stopRenderLoop(){
+  if (S.recRAF){ cancelAnimationFrame(S.recRAF); S.recRAF = 0; }
+}
+
+/* ============================================================
+   AUDIO GRAPH — exactly two contexts total.
+   audioCtx: shared by record + export.   decodeCtx: waveforms.
+   createMediaElementSource is called ONCE per element, guarded.
+   ============================================================ */
+let audioCtx=null, recordDest=null, micGain=null, micSrc=null;
+let importSrc=null, importGain=null;
+
+function ensureAudio(){
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  recordDest = audioCtx.createMediaStreamDestination();
+  micGain = audioCtx.createGain(); micGain.gain.value = S.micVol;
+  micGain.connect(recordDest);
+  reconnectMic();
+}
+function reconnectMic(){
+  if (!audioCtx || !micStream) return;
+  if (micSrc) return;                       // once per stream graph
+  try {
+    micSrc = audioCtx.createMediaStreamSource(micStream);
+    micSrc.connect(micGain);
+  } catch(e){ /* track may be gone */ }
+}
+function ensureImportAudio(){
+  ensureAudio();
+  if (importSrc) return;                     // createMediaElementSource ONCE only
+  try {
+    importGain = audioCtx.createGain(); importGain.gain.value = S.importVol;
+    importSrc = audioCtx.createMediaElementSource(importVid);
+    importSrc.connect(importGain);
+    importGain.connect(recordDest);          // into recording
+    importGain.connect(audioCtx.destination);// monitor on speakers
+    importVid.volume = 1;                     // level controlled by gain only
+  } catch(e){ console.warn('import audio graph', e); }
+}
+
+/* ============================================================
+   RECORDING
+   ============================================================ */
+let mediaRecorder=null, recChunks=[];
+let nextClipId = 1;            // stable per-clip id → waveform cache keyed by this, never by index
+
+function pickMime(){
+  const opts = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for (const m of opts) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return 'video/webm';
+}
+
+/* Export prefers MP4 (H.264 + AAC) so the file drops straight into TikTok / IG /
+   YouTube / an NLE without a convert step. Native MediaRecorder MP4 support is
+   recent and version-dependent, so we probe real codec strings and fall back to
+   WebM if the browser can't do it — no external transcoder, app stays offline.
+   Returns { mime, ext, mp4 }. (Clips keep recording in WebM either way; only the
+   final stitched download changes container.) */
+function pickExportMime(){
+  const mp4 = [
+    'video/mp4;codecs=avc1.640029,mp4a.40.2',  // H.264 High + AAC-LC
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',  // H.264 Baseline + AAC-LC
+    'video/mp4;codecs=avc1,mp4a',
+    'video/mp4',
+  ];
+  for (const m of mp4) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return { mime:m, ext:'mp4', mp4:true };
+  const webm = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for (const m of webm) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return { mime:m, ext:'webm', mp4:false };
+  return { mime:'video/webm', ext:'webm', mp4:false };
+}
+
+function buildRecordStream(){
+  const cs = canvas.captureStream(RECORD_FPS);   // MUST precede MediaRecorder
+  const stream = new MediaStream();
+  cs.getVideoTracks().forEach(t => stream.addTrack(t));
+  ensureAudio();
+  recordDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  return stream;
+}
+
+/* Raw stream: record the CAMERA's own audio + video tracks together, exactly as
+   the browser captured them. They share ONE capture clock, so there is no A/V
+   offset and no drift — this is the audio-delay fix. We intentionally do NOT
+   route mic through the WebAudio bus here; that detour through a
+   MediaStreamDestination is what desynced audio from the raw video track.
+   Consequence: the mic-VOLUME slider doesn't affect Normal takes (set level in
+   post). Mic MUTE still works because the audio track's enabled flag is honored
+   (toggleMic / startCamera set it), so a muted take records a silent track. */
+function buildRawRecordStream(){
+  const stream = new MediaStream();
+  if (micStream){
+    micStream.getVideoTracks().forEach(t => stream.addTrack(t));
+    micStream.getAudioTracks().forEach(t => stream.addTrack(t));  // native, in lockstep
+  }
+  return stream;
+}
+
+function startRecording(){
+  if (S.recording || !S.camReady) return;
+
+  // NORMAL = raw camera tracks (perfectly synced, canvas out of the record path).
+  // SPLIT/PiP = canvas capture: needs the WebAudio mix AND full output resolution.
+  const isRaw = (S.mode === MODES.NORMAL);
+  if (!isRaw){
+    ensureAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    setCanvasDims(outputDims(S.res));   // swap preview → full-res record surface
+    drawFrame();                        // paint one full-res frame before capture starts
+  }
+
+  const stream = isRaw ? buildRawRecordStream() : buildRecordStream();
+  try {
+    mediaRecorder = new MediaRecorder(stream, { mimeType: pickMime() });
+  } catch(e){
+    toast('Recording not supported in this browser.', true);
+    if (!isRaw) setCanvasDims(previewDims());   // undo the resize on failure
+    return;
+  }
+
+  recChunks = [];
+  const importStartT = (S.hasMedia && S.mediaKind==='video') ? importVid.currentTime : null;
+  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    // wait for onstop before assembling — late chunks already flushed here
+    const blob = new Blob(recChunks, { type:'video/webm' });
+    const dur = (performance.now() - S.recStart) / 1000;
+    addClip(blob, dur, importStartT, isRaw, isRaw ? snapshotLook() : null);
+  };
+  mediaRecorder.start();
+  S.recording = true;
+  S.recStart = performance.now();
+
+  // Imported video only composites in Split/PiP; never let its audio leak into a
+  // Normal take (which records the camera tracks only).
+  if (S.hasMedia && S.mediaKind === 'video' && !isRaw){
+    importVid.play().catch(()=>{});
+    S.importPlaying = true;
+  }
+  reflectRecordingUI(true);
+}
+
+function stopRecording(){
+  if (!S.recording) return;
+  S.recording = false;
+  try { mediaRecorder.stop(); } catch(e){}
+  // recorder has stopped capturing → return the canvas to the capped preview size
+  if (S.mode !== MODES.NORMAL) setCanvasDims(previewDims());
+  if (S.hasMedia && S.mediaKind === 'video'){ importVid.pause(); S.importPlaying = false; updateImpPlayBtn(); }
+  reflectRecordingUI(false);
+}
+
+function toggleRecording(){ S.recording ? stopRecording() : startRecording(); }
+
+function updateRecTimer(){
+  const t = (performance.now() - S.recStart) / 1000;
+  const str = fmt(t);
+  // skip DOM writes when unchanged
+  if ($('timer')._last !== str){ $('timer').textContent = str; $('rec-hud-time').textContent = str; $('timer')._last = str; }
+  if (t*1000 >= MAX_REC_MS) stopRecording();
+}
+
+function reflectRecordingUI(on){
+  $('rec-btn').classList.toggle('recording', on);
+  $('rec-btn').setAttribute('aria-label', on ? 'Stop recording' : 'Start recording');
+  $('rec-hud').classList.toggle('live', on);
+  if (!on){ $('timer').textContent = '0:00'; $('timer')._last='0:00'; }
+}
+
+/* ============================================================
+   CLIPS — schema defined once, all fields always present.
+   ============================================================ */
+function addClip(blob, duration, importStart, raw, look){
+  const clip = {
+    id: nextClipId++,           // stable identity for the life of this clip
+    blob,
+    duration: Math.max(0.05, duration),
+    trimStart: 0,
+    trimEnd: Math.max(0.05, duration),
+    speed: 1,
+    thumb: null,
+    importStart: (importStart==null ? null : importStart),
+    raw: !!raw,                 // true → recorded straight from camera, look applied at playback
+    look: look || null,         // { fit, scale, panX, panY, mirror, filterStr } for raw clips
+  };
+  S.clips.push(clip);
+  generateThumb(clip);
+  rebuildTimeline();
+  refreshClipDependentUI();
+  // Decode the real audio NOW (async, non-blocking): reconciles the true media
+  // duration and warms the waveform cache, so the editor opens on an accurate
+  // time axis with the waveform already drawn — no lazy snap, no first-open drift.
+  const idx = S.clips.length - 1;
+  computeWave(idx).then(() => { lastTimelineCount = -1; rebuildTimeline(); }).catch(()=>{});
+}
+
+function undoClip(){
+  if (S.recording || !S.clips.length) return;
+  const clip = S.clips.pop();
+  delete waveCache[clip.id];        // the take is gone → its waveform leaves no trace
+  // restore imported video to where it was when that clip started
+  if (clip.importStart != null && S.hasMedia && S.mediaKind === 'video'){
+    try { importVid.currentTime = clip.importStart; } catch(e){}
+    updateScrubPlayhead();
+  }
+  rebuildTimeline();
+  refreshClipDependentUI();
+  toast('Removed clip '+(S.clips.length+1));
+}
+
+function generateThumb(clip){
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true;
+  const url = URL.createObjectURL(clip.blob);
+  v.src = url;
+  const done = () => { try{ URL.revokeObjectURL(url); }catch(e){} };
+  v.addEventListener('loadeddata', () => {
+    try { v.currentTime = Math.min(0.05, (v.duration||1)/2); } catch(e){ done(); }
+  });
+  v.addEventListener('seeked', () => {
+    try {
+      const tw = 80, th = Math.round(tw * (canvasDims.h/canvasDims.w));
+      workCv.width = tw; workCv.height = th;
+      if (clip.raw){
+        workCtx.fillStyle = '#000'; workCtx.fillRect(0,0,tw,th);
+        compositeCam(workCtx, v, 0, 0, tw, th, clip.look);
+      } else {
+        workCtx.drawImage(v, 0, 0, tw, th);
+      }
+      clip.thumb = workCv.toDataURL('image/jpeg', 0.6);
+      rebuildTimeline();
+    } catch(e){}
+    done();
+  }, { once:true });
+  v.addEventListener('error', done, { once:true });
+}
+
+function refreshClipDependentUI(){
+  const has = S.clips.length > 0;
+  $('undo-btn').disabled = !has || S.recording;
+  $('edit-btn').disabled = !has;
+  $('edit-launch').style.display = has ? '' : 'none';
+}
+
+/* ============================================================
+   TIMELINE — rebuild DOM only when clip count changes.
+   ============================================================ */
+let lastTimelineCount = -1;
+function rebuildTimeline(){
+  const tl = $('timeline');
+  if (S.clips.length === 0){
+    tl.innerHTML = '<span class="tl-empty">No clips yet — hit record.</span>';
+    lastTimelineCount = 0; return;
+  }
+  // rebuild structure only when count changed; otherwise just patch thumbs/labels
+  if (S.clips.length !== lastTimelineCount){
+    tl.innerHTML = '';
+    const maxDur = Math.max(...S.clips.map(c => c.duration), 0.1);
+    S.clips.forEach((clip, i) => {
+      const pill = document.createElement('div');
+      pill.className = 'pill';
+      pill.style.width = (34 + (clip.duration/maxDur)*120) + 'px';
+      pill.dataset.i = i;
+      pill.innerHTML =
+        '<span class="num">'+(i+1)+'</span>'+
+        '<div class="reorder">'+
+          '<button data-act="left" '+(i===0?'disabled':'')+'>‹</button>'+
+          '<button data-act="right" '+(i===S.clips.length-1?'disabled':'')+'>›</button>'+
+        '</div>'+
+        '<div class="tip">'+clip.duration.toFixed(1)+'s</div>';
+      tl.appendChild(pill);
+    });
+    lastTimelineCount = S.clips.length;
+  }
+  // patch thumbnails (cheap, no full rebuild)
+  [...tl.querySelectorAll('.pill')].forEach(pill => {
+    const i = +pill.dataset.i; const clip = S.clips[i];
+    if (clip && clip.thumb && pill.style.backgroundImage === ''){
+      pill.style.backgroundImage = 'linear-gradient(rgba(10,10,12,.35),rgba(10,10,12,.35)),url('+clip.thumb+')';
+      pill.style.backgroundSize = 'cover'; pill.style.backgroundPosition = 'center';
+    }
+  });
+}
+
+$('timeline').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const i = +btn.closest('.pill').dataset.i;
+  const j = btn.dataset.act === 'left' ? i-1 : i+1;
+  if (j < 0 || j >= S.clips.length) return;
+  [S.clips[i], S.clips[j]] = [S.clips[j], S.clips[i]];
+  // cache is keyed by clip id → travels with the clip, no invalidation needed
+  lastTimelineCount = -1; rebuildTimeline();
+});
+
+/* ============================================================
+   IMPORTED MEDIA
+   ============================================================ */
+let importImg = null;
+let importObjectURL = null;
+
+function clearImport(){
+  if (importObjectURL){ try{ URL.revokeObjectURL(importObjectURL); }catch(e){} importObjectURL=null; }
+  importImg = null;
+  S.hasMedia = false; S.mediaKind = null; S.importPlaying = false;
+  importVid.pause(); importVid.removeAttribute('src'); importVid.load && importVid.load();
+  $('media-info').textContent = '';
+  $('video-tools').style.display = 'none';
+  if (S.mode !== MODES.NORMAL) toast('Imported media removed.');
+}
+
+function loadFile(file){
+  if (!file) return;
+  clearImportKeepGraph();
+  importObjectURL = URL.createObjectURL(file);
+  if (file.type.startsWith('image/')){
+    importImg = new Image();
+    importImg.onload = () => { S.hasMedia = true; S.mediaKind = 'image'; $('media-info').textContent = file.name+' · '+importImg.naturalWidth+'×'+importImg.naturalHeight; $('video-tools').style.display='none'; };
+    importImg.onerror = () => toast('Could not load image.', true);
+    importImg.src = importObjectURL;
+  } else if (file.type.startsWith('video/')){
+    importVid.src = importObjectURL;
+    importVid.onloadedmetadata = () => {
+      S.hasMedia = true; S.mediaKind = 'video';
+      $('media-info').textContent = file.name+' · '+importVid.videoWidth+'×'+importVid.videoHeight+' · '+fmt(importVid.duration);
+      $('video-tools').style.display = '';
+      ensureImportAudio();
+      buildFilmstrip();
+      updateScrubPlayhead();
+    };
+    importVid.onerror = () => toast('Could not load video.', true);
+  }
+}
+function clearImportKeepGraph(){
+  if (importObjectURL){ try{ URL.revokeObjectURL(importObjectURL); }catch(e){} importObjectURL=null; }
+  importImg = null; S.hasMedia=false; S.mediaKind=null;
+}
+
+/* filmstrip thumbnails for the scrub bar */
+async function buildFilmstrip(){
+  const film = $('scrub-film'); film.innerHTML = '';
+  const N = 10, dur = importVid.duration || 1;
+  const tmp = document.createElement('video');
+  tmp.muted = true; tmp.src = importVid.src;
+  await new Promise(r => tmp.addEventListener('loadeddata', r, { once:true }));
+  const cw = 48, ch = 34;
+  const c = document.createElement('canvas'); c.width=cw; c.height=ch; const cc = c.getContext('2d');
+  for (let i=0;i<N;i++){
+    const t = dur * (i+0.5)/N;
+    await new Promise(res => {
+      const onSeek = () => { try{ cc.drawImage(tmp,0,0,cw,ch); const img=new Image(); img.src=c.toDataURL('image/jpeg',0.5); film.appendChild(img);}catch(e){} res(); };
+      tmp.addEventListener('seeked', onSeek, { once:true });
+      try { tmp.currentTime = t; } catch(e){ res(); }
+    });
+  }
+}
+
+function updateScrubPlayhead(){
+  if (!S.hasMedia || S.mediaKind !== 'video') return;
+  const p = (importVid.currentTime / (importVid.duration||1)) * 100;
+  $('scrub-play').style.left = p + '%';
+}
+importVid.addEventListener('timeupdate', updateScrubPlayhead);
+importVid.addEventListener('ended', () => { S.importPlaying=false; updateImpPlayBtn(); });
+
+function updateImpPlayBtn(){ $('imp-play').textContent = S.importPlaying ? 'Pause preview' : 'Play preview'; }
+
+/* ============================================================
+   POINTER INTERACTION ON STAGE — rect cached, never read in RAF
+   ============================================================ */
+function invalidateRect(){ stageRect = null; }
+function getRect(){ if (!stageRect) stageRect = canvas.getBoundingClientRect(); return stageRect; }
+window.addEventListener('resize', invalidateRect);
+$('side').addEventListener('scroll', invalidateRect, { passive:true });
+
+let drag = null; // { type, ... }
+
+function evNorm(e){
+  const r = getRect();
+  return { x: clamp((e.clientX - r.left)/r.width, 0, 1), y: clamp((e.clientY - r.top)/r.height, 0, 1) };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (!S.camReady) return;
+  invalidateRect();                       // refresh once at drag start, not per-move
+  const p = evNorm(e);
+  canvas.setPointerCapture(e.pointerId);
+  canvas.classList.add('dragging');
+
+  if (S.mode === MODES.NORMAL){
+    drag = { type:'cam-pan', startX:p.x, startY:p.y, ox:S.camPanX, oy:S.camPanY };
+  } else if (S.mode === MODES.SPLIT){
+    if (Math.abs(p.y - S.splitDivider) < 0.035){
+      drag = { type:'divider' };
+    } else if (p.y < S.splitDivider){
+      drag = { type:'split-top', startX:p.x, startY:p.y, ox:S.splitTopPanX, oy:S.splitTopPanY };
+    } else {
+      drag = { type:'split-bot', startX:p.x, startY:p.y, ox:S.splitBotPanX, oy:S.splitBotPanY };
+    }
+  } else { // PIP
+    const box = pipBox();
+    const px = p.x*canvasDims.w, py = p.y*canvasDims.h;
+    const handle = 26; // px hit area for resize corner
+    if (px > box.x+box.w-handle && py > box.y+box.h-handle && px <= box.x+box.w+8 && py <= box.y+box.h+8){
+      drag = { type:'pip-resize' };
+    } else if (px >= box.x && px <= box.x+box.w && py >= box.y && py <= box.y+box.h){
+      drag = { type:'pip-move', dx:(px-box.x)/canvasDims.w, dy:(py-box.y)/canvasDims.h };
+    } else {
+      drag = null;
+    }
+  }
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const p = evNorm(e);
+  const noSnap = e.altKey;                 // hold Alt for fine, un-snapped positioning
+  const { w, h } = canvasDims;
+  S_snapGuides = [];
+  switch(drag.type){
+    case 'cam-pan': {
+      let px = clamp(drag.ox + (p.x-drag.startX)*2, -1, 1);
+      let py = clamp(drag.oy + (p.y-drag.startY)*2, -1, 1);
+      const s = snapCamPan(px, py, 0, 0, w, h, S.fit, S.camScale, noSnap);
+      S.camPanX = s.x; S.camPanY = s.y; break;
+    }
+    case 'divider':   S.splitDivider = clamp(p.y, 0.15, 0.85); break;
+    case 'split-top': S.splitTopPanX = clamp(drag.ox + (p.x-drag.startX)*2, -1, 1); S.splitTopPanY = clamp(drag.oy + (p.y-drag.startY)*2, -1, 1); break;
+    case 'split-bot': {
+      const divY = Math.round(h * S.splitDivider);
+      let px = clamp(drag.ox + (p.x-drag.startX)*2, -1, 1);
+      let py = clamp(drag.oy + (p.y-drag.startY)*2, -1, 1);
+      const s = snapCamPan(px, py, 0, divY, w, h - divY, S.fit, S.camScale, noSnap);
+      S.splitBotPanX = s.x; S.splitBotPanY = s.y; break;
+    }
+    case 'pip-move': {
+      let nx = clamp(p.x - drag.dx, 0, 1 - S.pip.w);
+      let ny = clamp(p.y - drag.dy, 0, 1);
+      const s = noSnap ? { x:nx, y:ny } : snapPipBox(nx, ny);
+      S.pip.x = s.x; S.pip.y = s.y; break;
+    }
+    case 'pip-resize':{
+      const nw = clamp(p.x - S.pip.x, 0.10, 0.65);
+      S.pip.w = nw; $('pipsize').value = Math.round(nw*100); $('pipsize-val').textContent = Math.round(nw*100)+'%';
+      break;
+    }
+  }
+});
+
+function endDrag(e){ if (drag){ drag=null; S_snapGuides=[]; canvas.classList.remove('dragging'); try{canvas.releasePointerCapture(e.pointerId);}catch(_){}} }
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+/* ============================================================
+   EDITOR — separate app. Recorder RAF fully stops while open.
+   ============================================================ */
+const pvVid = $('preview-vid');
+const pvCv  = $('preview-cv');
+const pvCtx = pvCv.getContext('2d', { alpha:false });
+let pvBlobUrls = [];
+let pvClipOffsets = [];      // cumulative effective (trimmed/speed) durations
+let pvIndex = 0;
+let pvTotal = 0;
+let waveCache = {};          // clip.id -> peak-envelope Float32Array (keyed by id, never index)
+let pvPlaying = false;
+
+function effDur(clip){ return (clip.trimEnd - clip.trimStart) / clip.speed; }
+
+function rebuildBlobUrls(){
+  // ALWAYS revoke then rebuild — never cache across open/close
+  pvBlobUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
+  pvBlobUrls = S.clips.map(c => URL.createObjectURL(c.blob));
+}
+function rebuildOffsets(){
+  pvClipOffsets = []; let acc = 0;
+  for (const c of S.clips){ pvClipOffsets.push(acc); acc += effDur(c); }
+  pvTotal = acc;
+  $('ed-total').textContent = fmt(acc);
+}
+function rebuildScrubMarks(){
+  const marks = $('ed-scrub-marks'); marks.innerHTML = '';
+  if (pvTotal <= 0) return;
+  pvClipOffsets.forEach((off, i) => {
+    if (i === 0) return;
+    const m = document.createElement('div'); m.className='ed-scrub-mark';
+    m.style.left = (off/pvTotal*100)+'%'; marks.appendChild(m);
+  });
+}
+
+function openEditor(){
+  if (!S.clips.length || S.editOpen) return;
+  if (S.recording) stopRecording();
+  S.editOpen = true;
+  stopRenderLoop();                       // recorder RAF OFF
+  rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
+  pvIndex = 0;
+  $('editor').classList.add('open');
+  loadClip(0, true);
+  startEditLoop();
+}
+function closeEditor(){
+  if (!S.editOpen) return;
+  S.editOpen = false;
+  stopEditLoop();
+  pvVid.pause(); pvPlaying = false; updatePlayIcon();
+  pvBlobUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
+  pvBlobUrls = [];
+  $('editor').classList.remove('open');
+  startRenderLoop();                      // recorder RAF back ON
+}
+
+function loadClip(i, autoplay){
+  if (i < 0 || i >= S.clips.length){ pvVid.pause(); pvPlaying=false; updatePlayIcon(); return; }
+  pvIndex = i;
+  const clip = S.clips[i];
+  pvVid.src = pvBlobUrls[i];
+  pvVid.playbackRate = clip.speed;        // set before metadata…
+  // raw clips are re-composited onto the preview canvas; baked clips show the
+  // video element directly. The video element still plays in both cases (it's
+  // the frame source + audio) — for raw clips it's just visually hidden.
+  if (clip.raw){
+    pvVid.style.display = 'none';
+    pvCv.style.display  = '';
+  } else {
+    pvCv.style.display  = 'none';
+    pvVid.style.display = '';
+  }
+  pvVid.onloadedmetadata = () => {
+    pvVid.playbackRate = clip.speed;      // …and after (browsers reset it)
+    pvVid.currentTime = clip.trimStart;
+    if (autoplay && pvPlaying) pvVid.play().catch(()=>{});
+  };
+  syncClipUI();
+  drawWaveform(i);
+}
+
+function syncClipUI(){
+  const clip = S.clips[pvIndex];
+  $('ed-clip-n').textContent = pvIndex+1;
+  $('ed-clip-total').textContent = S.clips.length;
+  $('ed-clip-total2') && ($('ed-clip-total2').textContent = S.clips.length);
+  $('ed-range').textContent = fmt2(clip.trimStart)+' – '+fmt2(clip.trimEnd)+'s';
+  $('ed-move-l').disabled = pvIndex===0;
+  $('ed-move-r').disabled = pvIndex===S.clips.length-1;
+  $('ed-delete').disabled = S.clips.length<=1 ? false : false;
+  // trim handles + dim
+  const full = clip.duration || 1;
+  const lp = (clip.trimStart/full)*100, rp = (clip.trimEnd/full)*100;
+  $('trim-l').style.left = lp+'%';
+  $('trim-r').style.left = 'calc('+rp+'% - 14px)';
+  $('trim-dim-l').style.width = lp+'%';
+  $('trim-dim-r').style.width = (100-rp)+'%';
+  // speed chips
+  [...$('speed-row').children].forEach(b => b.classList.toggle('on', parseFloat(b.dataset.spd)===clip.speed));
+}
+
+/* edit RAF: playhead, scrub, auto-advance through trims */
+function startEditLoop(){ if (S.editRAF) return; S.editRAF = requestAnimationFrame(editLoop); }
+function stopEditLoop(){ if (S.editRAF){ cancelAnimationFrame(S.editRAF); S.editRAF=0; } }
+let _edLast = { time:'', fill:-1 };
+function editLoop(){
+  S.editRAF = requestAnimationFrame(editLoop);
+  const clip = S.clips[pvIndex]; if (!clip) return;
+  // raw clips: re-composite the look onto the preview canvas (matches export)
+  if (clip.raw && pvVid.videoWidth){
+    const d = outputDims(S.res);
+    if (pvCv.width !== d.w || pvCv.height !== d.h){ pvCv.width = d.w; pvCv.height = d.h; }
+    pvCtx.fillStyle = '#000'; pvCtx.fillRect(0,0,d.w,d.h);
+    compositeCam(pvCtx, pvVid, 0, 0, d.w, d.h, clip.look);
+  }
+  // auto-advance at trimEnd
+  if (!pvVid.paused && pvVid.currentTime >= clip.trimEnd - 0.02){
+    if (pvIndex < S.clips.length-1){ const wasPlaying=pvPlaying; loadClip(pvIndex+1, false); if(wasPlaying){ pvVid.play().catch(()=>{}); } }
+    else { pvVid.pause(); pvPlaying=false; updatePlayIcon(); }
+  }
+  // local trim playhead
+  const full = clip.duration || 1;
+  $('trim-play').style.left = (clip.trimStart>=0 ? (pvVid.currentTime/full)*100 : 0)+'%';
+  // global scrub + time (skip DOM write if unchanged)
+  const localEff = clamp((pvVid.currentTime - clip.trimStart)/clip.speed, 0, effDur(clip));
+  const globalT = (pvClipOffsets[pvIndex]||0) + localEff;
+  const fillPct = pvTotal>0 ? (globalT/pvTotal*100) : 0;
+  if (Math.abs(fillPct - _edLast.fill) > 0.1){
+    $('ed-scrub-fill').style.width = fillPct+'%';
+    $('ed-scrub-play').style.left = fillPct+'%';
+    _edLast.fill = fillPct;
+  }
+  const ts = fmt(globalT)+' / '+fmt(pvTotal);
+  if (ts !== _edLast.time){ $('ed-time').textContent = ts; _edLast.time = ts; }
+}
+
+function edPlayPause(){
+  if (!S.editOpen) return;
+  if (pvVid.paused){ pvPlaying=true; if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); pvVid.play().catch(()=>{}); }
+  else { pvPlaying=false; pvVid.pause(); }
+  updatePlayIcon();
+}
+function updatePlayIcon(){
+  $('ed-play-ic').innerHTML = pvVid.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M7 5h3v14H7zM14 5h3v14h-3z"/>';
+}
+
+/* ---- waveform (shared decode context, cached, error-isolated) ---- */
+let decodeCtx = null;
+function getDecodeCtx(){ if (!decodeCtx) decodeCtx = new (window.AudioContext||window.webkitAudioContext)(); return decodeCtx; }
+
+/* Adopt the frame-accurate decoded duration as the ONE axis everything maps to
+   (playhead, trim, waveform). The recorder's stored duration is wall-clock
+   (performance.now diff) inflated by encoder start/stop latency — that mismatch
+   is what drifted the waveform out of sync. At ingest the clip is untrimmed, so
+   this is a clean adoption; the guards keep it safe if called after trimming. */
+function reconcileDuration(clip, realDur, i){
+  if (!(realDur > 0.05)) return;
+  if (Math.abs(realDur - clip.duration) <= 0.03) return;
+  const wasUntrimmed = clip.trimStart < 0.001 && Math.abs(clip.trimEnd - clip.duration) < 0.05;
+  clip.duration  = realDur;
+  clip.trimEnd   = wasUntrimmed ? realDur : Math.min(clip.trimEnd, realDur);
+  clip.trimStart = Math.min(clip.trimStart, Math.max(0, realDur - 0.1));
+  if (S.editOpen){ rebuildOffsets(); rebuildScrubMarks(); if (i === pvIndex) syncClipUI(); }
+}
+
+async function computeWave(i){
+  const clip = S.clips[i];
+  if (!clip) return null;
+  const key = clip.id;                       // cache by stable id, NEVER by index
+  if (waveCache[key]) return waveCache[key];
+  try {
+    const buf = await clip.blob.arrayBuffer();
+    const audio = await getDecodeCtx().decodeAudioData(buf.slice(0));
+    reconcileDuration(clip, audio.duration, i);
+
+    const ch = audio.getChannelData(0);
+    // PEAK envelope (max |sample| per bucket), NOT RMS. Peaks make the exact
+    // moment a voice starts and stops crisp; RMS rounds those edges off. Bucket
+    // count scales with length (~200/sec ≈ 5ms each) so a long take stays
+    // detailed enough to target a tenth of a second, bounded so memory/draw
+    // stay cheap.
+    const N = clamp(Math.round(audio.duration * 200), 800, 6000);
+    const block = Math.max(1, Math.floor(ch.length / N));
+    const env = new Float32Array(N);
+    let max = 0;
+    for (let p=0; p<N; p++){
+      const start = p*block; let pk = 0;
+      for (let j=0;j<block;j++){ const v = Math.abs(ch[start+j]||0); if (v>pk) pk=v; }
+      env[p] = pk; if (pk>max) max=pk;
+    }
+    if (max>0) for (let p=0;p<N;p++) env[p] /= max;
+    // Only cache if the clip still exists — it may have been undone WHILE this
+    // decode was in flight (the rapid record→judge→undo loop). Caching here
+    // anyway would re-poison the slot and leak the array.
+    if (S.clips.some(c => c.id === key)) waveCache[key] = env;
+    return env;
+  } catch(e){ return null; }
+}
+function drawWaveform(i){
+  // measure after paint, isolate all errors from playback
+  requestAnimationFrame(() => {
+    computeWave(i).then(env => {
+      if (!env || i!==pvIndex) return;
+      const cv = $('trim-wave'), wrap = $('trim');
+      cv.width = wrap.offsetWidth; cv.height = wrap.offsetHeight;
+      const g = cv.getContext('2d');
+      g.clearRect(0,0,cv.width,cv.height);
+      const mid = cv.height/2, cw = cv.width;
+      // Map the high-res envelope → one bar PER PIXEL COLUMN at that column's
+      // peak. This shows real transients truthfully with no overdraw or smear,
+      // so the first eyeball placement lands within a nudge.
+      const per = env.length / cw;
+      g.fillStyle = 'rgba(154,154,166,.6)';
+      for (let x=0; x<cw; x++){
+        const lo = Math.floor(x*per), hi = Math.max(lo+1, Math.floor((x+1)*per));
+        let pk = 0;
+        for (let k=lo;k<hi && k<env.length;k++) if (env[k]>pk) pk=env[k];
+        const h = Math.max(1, pk*cv.height*0.9);
+        g.fillRect(x, mid-h/2, 1, h);
+      }
+    }).catch(()=>{});
+  });
+}
+
+/* ---- trim handle drag ---- */
+let trimDrag = null;
+function trimRect(){ return $('trim').getBoundingClientRect(); }
+function startTrim(which){ return e => { trimDrag = which; e.preventDefault(); }; }
+$('trim-l').addEventListener('pointerdown', startTrim('l'));
+$('trim-r').addEventListener('pointerdown', startTrim('r'));
+window.addEventListener('pointermove', e => {
+  if (!trimDrag) return;
+  const r = trimRect(); const clip = S.clips[pvIndex]; if (!clip) return;
+  const t = clamp((e.clientX-r.left)/r.width, 0, 1) * clip.duration;
+  if (trimDrag==='l') clip.trimStart = clamp(t, 0, clip.trimEnd-0.1);
+  else clip.trimEnd = clamp(t, clip.trimStart+0.1, clip.duration);
+  if (pvVid.currentTime < clip.trimStart) pvVid.currentTime = clip.trimStart;
+  if (pvVid.currentTime > clip.trimEnd)   pvVid.currentTime = clip.trimEnd;
+  syncClipUI();
+});
+window.addEventListener('pointerup', () => {
+  if (trimDrag){ trimDrag=null; rebuildOffsets(); rebuildScrubMarks(); drawWaveform(pvIndex); }
+});
+
+/* click trim track to seek */
+$('trim').addEventListener('pointerdown', e => {
+  if (e.target.classList.contains('trim-handle')) return;
+  const r = trimRect(); const clip = S.clips[pvIndex];
+  const t = clamp((e.clientX-r.left)/r.width,0,1)*clip.duration;
+  pvVid.currentTime = clamp(t, clip.trimStart, clip.trimEnd);
+});
+
+/* global scrub click-to-seek */
+$('ed-scrub').addEventListener('pointerdown', e => {
+  const r = $('ed-scrub').getBoundingClientRect();
+  const frac = clamp((e.clientX-r.left)/r.width,0,1);
+  const target = frac * pvTotal;
+  // find clip containing target
+  let idx = 0;
+  for (let i=0;i<pvClipOffsets.length;i++){ if (target >= pvClipOffsets[i]) idx=i; }
+  const local = target - pvClipOffsets[idx];
+  const clip = S.clips[idx];
+  if (idx !== pvIndex) loadClip(idx, false);
+  const want = clip.trimStart + local*clip.speed;
+  const apply = () => { pvVid.currentTime = clamp(want, clip.trimStart, clip.trimEnd); };
+  if (pvVid.readyState >= 1) apply(); else pvVid.addEventListener('loadedmetadata', apply, { once:true });
+});
+
+/* clip operations */
+function moveClip(dir){
+  const j = pvIndex + dir;
+  if (j<0 || j>=S.clips.length) return;
+  [S.clips[pvIndex], S.clips[j]] = [S.clips[j], S.clips[pvIndex]];
+  // waveform cache is keyed by clip id, so it travels with the clip — no clear.
+  lastTimelineCount = -1; rebuildTimeline();
+  rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
+  pvIndex = j; loadClip(j, false);
+}
+function deleteClip(){
+  if (S.clips.length === 0) return;
+  if (!confirm('Delete clip '+(pvIndex+1)+'? This cannot be undone.')) return;
+  const removed = S.clips.splice(pvIndex,1)[0];
+  if (removed) delete waveCache[removed.id];   // drop just the removed clip's wave
+  lastTimelineCount = -1; rebuildTimeline(); refreshClipDependentUI();
+  if (S.clips.length === 0){ closeEditor(); return; }
+  rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
+  pvIndex = clamp(pvIndex, 0, S.clips.length-1);
+  loadClip(pvIndex, false);
+}
+function splitClip(){
+  const clip = S.clips[pvIndex];
+  const at = pvVid.currentTime;
+  if (at <= clip.trimStart+0.1 || at >= clip.trimEnd-0.1){ toast('Move the playhead inside the clip to split.'); return; }
+  const a = { ...clip, id: nextClipId++, trimEnd: at };
+  const b = { ...clip, id: nextClipId++, trimStart: at };
+  S.clips.splice(pvIndex, 1, a, b);
+  delete waveCache[clip.id];               // parent gone; halves recompute under their own ids
+  lastTimelineCount = -1; rebuildTimeline();
+  rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
+  loadClip(pvIndex, false);
+  toast('Split into 2 clips.');
+}
+
+/* ============================================================
+   EXPORT — single MediaRecorder on export canvas, clips in order.
+   rVFC when available, RAF fallback (never setInterval).
+   ============================================================ */
+let exporting = false;
+function even(n){ return Math.max(2, Math.round(n/2)*2); }   // H.264 needs even dims
+function pickAvcCodec(w,h){
+  const px = Math.max(w,h);
+  if (px <= 1920) return 'avc1.640028';   // High@4.0  (≤1080p)
+  if (px <= 2560) return 'avc1.640032';   // High@5.0  (≤1440p)
+  return 'avc1.640033';                    // High@5.1  (4K)
+}
+
+/* Clean export: WebCodecs → a FLAT, CONSTANT-frame-rate MP4 written by a real
+   muxer (proper moov with sample tables up front). This is the file TikTok/IG's
+   editors and DaVinci Resolve actually accept — unlike MediaRecorder's
+   fragmented, variable-frame-rate output. Falls back to the old MediaRecorder
+   path automatically if WebCodecs or the muxer isn't present. */
+async function exportAll(){
+  if (exporting) return;
+  if (!S.clips.length){ toast('Record a clip first.'); return; }
+  const haveWC = ('VideoEncoder' in window) && ('AudioEncoder' in window) &&
+                 ('VideoFrame' in window) && ('AudioData' in window) &&
+                 (typeof Mp4Muxer !== 'undefined');
+  if (!haveWC) return exportAllLegacy();
+  try { await exportWebCodecs(); }
+  catch(e){
+    console.error('Clean export failed, using fallback:', e);
+    toast('Clean MP4 path failed — used the fallback recorder instead.', true);
+    exporting = false;
+    return exportAllLegacy();
+  }
+}
+
+async function exportWebCodecs(){
+  exporting = true;
+  const wasEditOpen = S.editOpen;
+  stopRenderLoop();
+  showModal('Exporting', 'Preparing clean MP4…');
+
+  let videoEncoder=null, audioEncoder=null, encErr=null;
+  try {
+    const SR = 48000, FPS = TARGET_FPS;
+    const raw = outputDims(S.expRes);
+    const dims = { w: even(raw.w), h: even(raw.h) };
+    exCanvas.width = dims.w; exCanvas.height = dims.h;
+
+    // Plan the whole timeline in WHOLE FRAMES so audio and video share one exact
+    // axis (this is what keeps them locked in sync — no VFR, no drift).
+    const plan = []; let totalFrames = 0;
+    for (const clip of S.clips){
+      const n = Math.max(1, Math.round(effDur(clip) * FPS));
+      plan.push({ clip, startFrame: totalFrames, frames: n });
+      totalFrames += n;
+    }
+    if (!totalFrames) throw new Error('nothing to export');
+    const totalDurSec = totalFrames / FPS;
+
+    // Pick codecs, verifying support and stepping down if needed.
+    let vcodec = pickAvcCodec(dims.w, dims.h);
+    let hwAccel = 'prefer-hardware';      // use the GPU encoder (e.g. NVENC) when available — big speedup
+    const vbr = Math.round(S.expBitrate*1e6);
+    const probeV = async (codec, hw) => {
+      try { const r = await VideoEncoder.isConfigSupported({ codec, width:dims.w, height:dims.h, bitrate:vbr, framerate:FPS, hardwareAcceleration:hw }); return !!(r && r.supported); }
+      catch(e){ return false; }
+    };
+    if (VideoEncoder.isConfigSupported){
+      const codecs = [vcodec, 'avc1.640033','avc1.640032','avc1.640028','avc1.42E01E'];
+      let chosen = null;
+      for (const c of codecs){ if (await probeV(c, 'prefer-hardware')){ chosen={codec:c, hw:'prefer-hardware'}; break; } }   // GPU first
+      if (!chosen) for (const c of codecs){ if (await probeV(c, 'no-preference')){ chosen={codec:c, hw:'no-preference'}; break; } } // CPU fallback
+      if (!chosen) throw new Error('H.264 encoding unavailable');
+      vcodec = chosen.codec; hwAccel = chosen.hw;
+    }
+    let acodec='mp4a.40.2', amux='aac';
+    if (AudioEncoder.isConfigSupported){
+      const a = await AudioEncoder.isConfigSupported({ codec:acodec, sampleRate:SR, numberOfChannels:2, bitrate:192000 }).catch(()=>null);
+      if (!a || !a.supported){
+        const o = await AudioEncoder.isConfigSupported({ codec:'opus', sampleRate:SR, numberOfChannels:2, bitrate:192000 }).catch(()=>null);
+        if (o && o.supported){ acodec='opus'; amux='opus'; }
+        else throw new Error('audio encoding unavailable');
+      }
+    }
+
+    const { Muxer, ArrayBufferTarget } = Mp4Muxer;
+    const muxer = new Muxer({
+      target: new ArrayBufferTarget(),
+      video: { codec:'avc', width:dims.w, height:dims.h, frameRate:FPS },
+      audio: { codec:amux, numberOfChannels:2, sampleRate:SR },
+      fastStart: 'in-memory',                 // flat moov at the FRONT (faststart)
+      firstTimestampBehavior: 'offset',
+    });
+
+    const onEncErr = e => { encErr = encErr || e; };
+    videoEncoder = new VideoEncoder({ output:(c,m)=>{ try{ muxer.addVideoChunk(c,m); }catch(e){ onEncErr(e);} }, error:onEncErr });
+    videoEncoder.configure({ codec:vcodec, width:dims.w, height:dims.h, bitrate:vbr, framerate:FPS, hardwareAcceleration:hwAccel, avc:{ format:'avc' } });
+    audioEncoder = new AudioEncoder({ output:(c,m)=>{ try{ muxer.addAudioChunk(c,m); }catch(e){ onEncErr(e);} }, error:onEncErr });
+    audioEncoder.configure({ codec:acodec, sampleRate:SR, numberOfChannels:2, bitrate:192000 });
+
+    // ----- AUDIO: render the entire timeline at once (trim + speed + concat +
+    // resample to 48k) using OfflineAudioContext, then feed it to the encoder. -----
+    $('modal-sub').textContent = 'Mixing audio…';
+    const offline = new OfflineAudioContext(2, Math.max(1, Math.ceil(totalDurSec*SR)), SR);
+    for (const p of plan){
+      let abuf=null;
+      try { abuf = await offline.decodeAudioData((await p.clip.blob.arrayBuffer()).slice(0)); } catch(e){ abuf=null; }
+      if (!abuf) continue;                       // no audio track → silence for this clip
+      const node = offline.createBufferSource();
+      node.buffer = abuf;
+      node.playbackRate.value = p.clip.speed;    // speed (pitch shifts on non-1x clips)
+      const when = p.startFrame / FPS;
+      const srcDur = Math.min((p.frames/FPS)*p.clip.speed, Math.max(0.001, p.clip.trimEnd - p.clip.trimStart));
+      try { node.connect(offline.destination); node.start(when, p.clip.trimStart, srcDur); } catch(e){}
+    }
+    const mixed = await offline.startRendering();
+    const ch0 = mixed.getChannelData(0);
+    const ch1 = mixed.numberOfChannels>1 ? mixed.getChannelData(1) : ch0;
+    const ACH = 4096;
+    for (let off=0; off<mixed.length; off+=ACH){
+      if (encErr) throw encErr;
+      const len = Math.min(ACH, mixed.length-off);
+      const planar = new Float32Array(len*2);     // f32-planar: [L…][R…]
+      planar.set(ch0.subarray(off, off+len), 0);
+      planar.set(ch1.subarray(off, off+len), len);
+      const adata = new AudioData({ format:'f32-planar', sampleRate:SR, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round(off/SR*1e6), data:planar });
+      audioEncoder.encode(adata); adata.close();
+    }
+
+    // ----- VIDEO: play each clip ONCE and capture frames as they're presented
+    // (requestVideoFrameCallback), resampling onto the fixed 30fps grid. This
+    // avoids per-frame seeking — which is brutally slow on MediaRecorder webm —
+    // so export runs at ~playback speed instead of many times longer. Playback is
+    // muted and run at 2× (safe on a 60Hz display for ≤30fps sources). The slow
+    // seek-per-frame method is kept as a per-clip fallback for robustness. -----
+    const frameDurUs = 1e6/FPS;
+    let gf = 0;
+    const drawClipFrame = (v, clip) => {
+      const sw=v.videoWidth, sh=v.videoHeight;
+      if (!(sw && sh)) return;
+      if (clip.raw){ exCtx.fillStyle='#000'; exCtx.fillRect(0,0,dims.w,dims.h); compositeCam(exCtx, v, 0,0, dims.w, dims.h, clip.look); }
+      else { const sc=Math.max(dims.w/sw, dims.h/sh), cw=dims.w/sc, chh=dims.h/sc, cx=(sw-cw)/2, cy=(sh-chh)/2; exCtx.drawImage(v, cx, cy, cw, chh, 0,0, dims.w, dims.h); }
+    };
+    const encodeAt = (globalIdx) => {
+      if (encErr) return;
+      try {
+        const frame = new VideoFrame(exCanvas, { timestamp: Math.round(globalIdx*frameDurUs), duration: Math.round(frameDurUs) });
+        videoEncoder.encode(frame, { keyFrame: (globalIdx % (FPS*2) === 0) });
+        frame.close();
+      } catch(e){ encErr = encErr || e; }
+    };
+    const tick = () => { if ((gf & 7)===0){ setProgress(gf/totalFrames); $('modal-sub').textContent = 'Encoding '+gf+' / '+totalFrames+' frames…'; } };
+
+    const renderClipPlay = (p) => new Promise(async (resolve, reject) => {
+      const clip = p.clip, base = p.startFrame;
+      let k = 0, done = false, started = false, url = null, v = null;
+      const fillRest = () => { while (k < p.frames){ encodeAt(base + k); k++; gf++; } };
+      const finish = () => { if (done) return; done = true; try{ if(v) v.pause(); }catch(e){} if(url) try{ URL.revokeObjectURL(url); }catch(e){} resolve(); };
+      // Once playback has started we've committed frames to the encoder, so we
+      // can't cleanly hand off to the seek fallback. Instead, finish the clip by
+      // holding the last frame (keeps the timeline exact) and resolve. Only a
+      // failure BEFORE any frame was emitted rejects → clean seek fallback.
+      const fail = (e) => {
+        if (done) return;
+        if (encErr){ done = true; if(url) try{ URL.revokeObjectURL(url); }catch(_){} reject(encErr); return; }
+        if (started){ done = true; try{ if(v) v.pause(); }catch(_){} fillRest(); if(url) try{ URL.revokeObjectURL(url); }catch(_){} resolve(); }
+        else { done = true; if(url) try{ URL.revokeObjectURL(url); }catch(_){} reject(e); }
+      };
+      const emitUpTo = (srcTime) => {
+        while (k < p.frames){
+          const srcK = clip.trimStart + (k/FPS)*clip.speed;
+          if (srcK > srcTime + 1e-4) break;
+          encodeAt(base + k); k++; gf++;
+        }
+      };
+      try {
+        v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'auto';
+        url = URL.createObjectURL(clip.blob); v.src = url;
+        await new Promise((r,j)=>{ v.onloadeddata = r; v.addEventListener('error', ()=>j(new Error('clip load failed')), {once:true}); });
+        // one seek per clip to the trim-in point
+        await new Promise((r)=>{ const ok=()=>r(); v.addEventListener('seeked', ok, {once:true}); try{ v.currentTime = clip.trimStart; }catch(e){ ok(); } setTimeout(ok, 800); });
+        v.playbackRate = 2;   // smooth ceiling: a 60Hz display presents ~60 frames/sec, so 2x ⇒ 30 captured/sec = our grid
+        const onFrame = (now, meta) => {
+          if (done) return;
+          if (encErr) return fail(encErr);
+          started = true;
+          const M = (meta && typeof meta.mediaTime==='number') ? meta.mediaTime : v.currentTime;
+          drawClipFrame(v, clip);
+          emitUpTo(M);
+          tick();
+          if (encErr) return fail(encErr);
+          if (k >= p.frames || M >= clip.trimEnd - 1e-3){ finish(); return; }
+          if (videoEncoder.encodeQueueSize > 24){            // backpressure (4K safety)
+            v.pause();
+            const wait = () => { if (done) return; if (videoEncoder.encodeQueueSize > 8){ setTimeout(wait, 8); } else { v.play().then(()=>v.requestVideoFrameCallback(onFrame)).catch(e=>fail(e)); } };
+            setTimeout(wait, 8); return;
+          }
+          v.requestVideoFrameCallback(onFrame);
+        };
+        // video ended before all output frames (audio longer than video) → hold last
+        v.addEventListener('ended', () => { if (done) return; started = true; fillRest(); finish(); });
+        await v.play();
+        v.requestVideoFrameCallback(onFrame);
+      } catch(e){ fail(e); }
+    });
+
+    // proven fallback: seek to each frame (slow but reliable for odd clips)
+    const renderClipSeek = async (p) => {
+      const clip = p.clip, base = p.startFrame;
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      const url = URL.createObjectURL(clip.blob); v.src = url;
+      try {
+        await new Promise((res,rej)=>{ v.onloadeddata = res; v.onerror = ()=>rej(new Error('clip load failed')); });
+        const seekTo = (t) => new Promise((res)=>{ let d=false; const ok=()=>{ if(d)return; d=true; res(); };
+          v.addEventListener('seeked', ok, {once:true}); try{ v.currentTime=t; }catch(e){ ok(); } setTimeout(ok, 500); });
+        for (let k=0; k<p.frames; k++){
+          if (encErr) throw encErr;
+          await seekTo(Math.min(clip.trimStart + (k/FPS)*clip.speed, Math.max(0, clip.trimEnd - 1e-3)));
+          drawClipFrame(v, clip);
+          encodeAt(base + k); gf++;
+          if (videoEncoder.encodeQueueSize > 16) await new Promise(r=>setTimeout(r,3));
+          tick();
+        }
+      } finally { try{ v.pause(); }catch(e){} URL.revokeObjectURL(url); }
+    };
+
+    for (const p of plan){
+      if (encErr) throw encErr;
+      const before = gf;
+      try { await renderClipPlay(p); }
+      catch(e){
+        console.warn('play-capture failed for a clip, using seek fallback:', e);
+        gf = before;                                  // rewind any partial emits for this clip
+        await renderClipSeek(p);
+      }
+    }
+
+    $('modal-sub').textContent = 'Finalizing…';
+    await videoEncoder.flush();
+    await audioEncoder.flush();
+    if (encErr) throw encErr;
+    muxer.finalize();
+
+    const blob = new Blob([muxer.target.buffer], { type:'video/mp4' });
+    downloadBlob(blob, 'meatcord-'+Date.now()+'.mp4');
+    setProgress(1);
+    toast('Export ready — clean MP4 (uploads & imports cleanly).');
+  } finally {
+    try { if (videoEncoder && videoEncoder.state!=='closed') videoEncoder.close(); } catch(e){}
+    try { if (audioEncoder && audioEncoder.state!=='closed') audioEncoder.close(); } catch(e){}
+    hideModal();
+    exporting = false;
+    if (!wasEditOpen) startRenderLoop();
+  }
+}
+
+async function exportAllLegacy(){
+  if (exporting) return;
+  if (!S.clips.length){ toast('Record a clip first.'); return; }
+  exporting = true;
+  const wasEditOpen = S.editOpen;
+  stopRenderLoop();                         // free CPU during export
+
+  const dims = outputDims(S.expRes);
+  exCanvas.width = dims.w; exCanvas.height = dims.h;
+
+  ensureAudio();
+  if (audioCtx.state==='suspended') await audioCtx.resume();
+  const exDest = audioCtx.createMediaStreamDestination();
+
+  const cs = exCanvas.captureStream(TARGET_FPS);   // before MediaRecorder
+  const stream = new MediaStream();
+  cs.getVideoTracks().forEach(t => stream.addTrack(t));
+  exDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+
+  let out = pickExportMime();
+  // The browser's default MediaRecorder bitrate is very conservative (looks
+  // soft). Drive it explicitly from the user's choice. audioBitsPerSecond kept
+  // high so voice stays clean.
+  const recOpts = {
+    mimeType: out.mime,
+    videoBitsPerSecond: Math.round(S.expBitrate * 1e6),
+    audioBitsPerSecond: 192000,
+  };
+  let mr;
+  try { mr = new MediaRecorder(stream, recOpts); }
+  catch(e){
+    // some builds report MP4 supported but throw on construct — fall back to WebM
+    out = { mime: pickMime(), ext:'webm', mp4:false };
+    recOpts.mimeType = out.mime;
+    try { mr = new MediaRecorder(stream, recOpts); }
+    catch(e2){ toast('Export not supported here.', true); exporting=false; if(!wasEditOpen) startRenderLoop(); return; }
+  }
+  const chunks = [];
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const finished = new Promise(res => mr.onstop = res);
+
+  showModal('Exporting', 'Stitching '+S.clips.length+' clip'+(S.clips.length>1?'s':'')+'…');
+  mr.start();
+
+  const fmtTag = out.ext.toUpperCase()+' · '+S.expBitrate+' Mbps';
+  try {
+    for (let i=0;i<S.clips.length;i++){
+      setProgress(i/S.clips.length);
+      $('modal-sub').textContent = 'Rendering clip '+(i+1)+' of '+S.clips.length+' · '+fmtTag+'…';
+      await exportClip(S.clips[i], exDest, dims);
+    }
+    setProgress(1);
+  } catch(e){ console.error(e); }
+
+  mr.stop();
+  await finished;
+  exDest.disconnect();
+
+  const blob = new Blob(chunks, { type: out.mp4 ? 'video/mp4' : 'video/webm' });
+  downloadBlob(blob, 'meatcord-'+Date.now()+'.'+out.ext);
+  hideModal();
+  exporting = false;
+  if (!wasEditOpen) startRenderLoop();
+  toast(out.mp4
+    ? 'Export ready (MP4) — check your downloads.'
+    : 'MP4 not supported by this browser — exported WebM instead. Update Chrome for MP4.', !out.mp4);
+}
+
+function exportClip(clip, exDest, dims){
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.muted = false; v.playsInline = true;
+    const url = URL.createObjectURL(clip.blob);
+    v.src = url;
+    let src=null, gain=null, raf=0, rvfc=0, settled=false;
+
+    const cleanup = () => {
+      if (settled) return; settled = true;
+      try { v.pause(); } catch(e){}
+      if (raf) cancelAnimationFrame(raf);
+      if (rvfc && v.cancelVideoFrameCallback) { try { v.cancelVideoFrameCallback(rvfc); } catch(e){} }
+      try { if (src) src.disconnect(); if (gain) gain.disconnect(); } catch(e){}
+      try { URL.revokeObjectURL(url); } catch(e){}
+      resolve();
+    };
+
+    v.onloadedmetadata = async () => {
+      v.playbackRate = clip.speed;
+      try {
+        src = audioCtx.createMediaElementSource(v);   // fresh element → one source
+        gain = audioCtx.createGain(); gain.gain.value = 1;
+        src.connect(gain); gain.connect(exDest);
+      } catch(e){ /* audio optional */ }
+      if (audioCtx.state==='suspended') await audioCtx.resume();
+      const seekDone = () => {
+        v.playbackRate = clip.speed;                  // re-assert after seek
+        v.play().then(() => pump()).catch(() => pump());
+      };
+      v.addEventListener('seeked', seekDone, { once:true });
+      try { v.currentTime = clip.trimStart; } catch(e){ seekDone(); }
+    };
+
+    const drawFrame = () => {
+      const sw=v.videoWidth, sh=v.videoHeight;
+      if (!(sw && sh)) return;
+      if (clip.raw){
+        // re-apply the recorded look onto the export canvas (matches editor preview)
+        exCtx.fillStyle = '#000'; exCtx.fillRect(0,0,dims.w,dims.h);
+        compositeCam(exCtx, v, 0, 0, dims.w, dims.h, clip.look);
+      } else {
+        // baked clip — compositing already in the frames; cover-draw it
+        const sc = Math.max(dims.w/sw, dims.h/sh);
+        const cw = dims.w/sc, chh = dims.h/sc;
+        const cx = (sw-cw)/2, cy = (sh-chh)/2;
+        exCtx.drawImage(v, cx, cy, cw, chh, 0, 0, dims.w, dims.h);
+      }
+    };
+
+    // A clip can have its AUDIO track run longer than its VIDEO track (e.g. a
+    // Split/PiP take whose canvas-capture stalled for a moment near the end). The
+    // source then simply has no more video frames, so requestVideoFrameCallback
+    // stops firing. The old loop froze the canvas there (captureStream got ZERO
+    // frames) until a 2s safety timeout — that was the "clip frozen at the end".
+    const hasRVFC = 'requestVideoFrameCallback' in v;
+    let lastFrameWall = 0;                 // perf.now() of the last REAL video frame
+    let lastFrameMedia = clip.trimStart;   // its presentation time
+    const STALL_MS = 250;                  // no new frame this long ⇒ video track exhausted
+
+    const reachedEnd = () => (v.currentTime >= clip.trimEnd - 0.01 || v.ended);
+
+    const onVideoFrame = (now, meta) => {
+      if (settled) return;
+      lastFrameWall = performance.now();
+      lastFrameMedia = (meta && typeof meta.mediaTime === 'number') ? meta.mediaTime : v.currentTime;
+      drawFrame();
+      if (reachedEnd()){ cleanup(); return; }
+      rvfc = v.requestVideoFrameCallback(onVideoFrame);
+    };
+
+    // RAF watchdog: runs every frame whether or not the video produced a new one.
+    // It keeps the canvas painted (captureStream never gaps) and ends the clip at
+    // the right time — including when the video runs out of frames before the
+    // audio, in which case it stops at the last real frame instead of freezing.
+    const watchdog = () => {
+      if (settled) return;
+      raf = requestAnimationFrame(watchdog);
+      if (reachedEnd()){ cleanup(); return; }
+      const silent = performance.now() - lastFrameWall;
+      // video exhausted well before the audio end → end at the last real frame
+      // (drops the glitched, frozen audio-only tail). rVFC-only; the RAF fallback
+      // has no reliable per-frame signal so it just plays out to trimEnd.
+      if (hasRVFC && silent > STALL_MS && v.currentTime > lastFrameMedia + STALL_MS/1000){ cleanup(); return; }
+      if (silent > 80) drawFrame();   // bridge brief stalls so captureStream stays fed
+    };
+
+    const pump = () => {
+      if (settled) return;
+      lastFrameWall = performance.now();
+      lastFrameMedia = v.currentTime;
+      if (hasRVFC) rvfc = v.requestVideoFrameCallback(onVideoFrame);
+      raf = requestAnimationFrame(watchdog);   // always run the watchdog
+    };
+    v.onerror = cleanup;
+    // hard timeout safety: clip duration / speed + 1s
+    setTimeout(cleanup, ((clip.trimEnd-clip.trimStart)/clip.speed)*1000 + 2000);
+  });
+}
+
+function downloadBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* ============================================================
+   SMALL UI HELPERS
+   ============================================================ */
+let toastT=0;
+function toast(msg, isErr){
+  const t = $('toast'); t.textContent = msg; t.classList.toggle('err', !!isErr); t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200);
+}
+function showModal(title, sub){ $('modal-title').textContent=title; $('modal-sub').textContent=sub; setProgress(0); $('modal').classList.add('open'); }
+function hideModal(){ $('modal').classList.remove('open'); }
+function setProgress(f){ $('prog-bar').style.width = clamp(f*100,0,100)+'%'; }
+
+function setMode(mode){
+  S.mode = mode;
+  // clear mode-specific transient state on switch
+  S.camPanX=0; S.camPanY=0;
+  [...$('mode-seg').children].forEach(b => b.classList.toggle('on', b.dataset.mode===mode));
+  $('pip-panel').style.display = mode===MODES.PIP ? '' : 'none';
+  if (mode!==MODES.NORMAL && !S.hasMedia) toast('Import an image or video for '+(mode==='split'?'Split':'PiP')+' mode.');
+}
+
+function checkExportWarning(){
+  const total = S.clips.reduce((a,c)=>a+effDur(c),0);
+  const big = (S.res==='4K' || S.expRes==='4K') && total > WARN_4K_SECONDS;
+  $('warn-pill').classList.toggle('show', big && !S.editOpen);
+  if (big) $('warn-pill').textContent = 'Long 4K timeline — 1080p is smoother for clips over 2 min.';
+  if (!S.clips.length){ $('export-note').textContent = ''; return; }
+  // rough size estimate: (video + ~0.2 Mbps audio) × seconds ÷ 8
+  const mb = Math.round(((S.expBitrate + 0.2) * total) / 8);
+  const sizeStr = mb >= 1024 ? (mb/1024).toFixed(1)+' GB' : mb+' MB';
+  $('export-note').textContent =
+    S.clips.length+' clips · '+fmt(total)+' · '+S.expRes+' · '+S.expBitrate+' Mbps · ~'+sizeStr;
+}
+
+/* ============================================================
+   EVENT WIRING
+   ============================================================ */
+// topbar segments
+$('mode-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setMode(b.dataset.mode); });
+$('ar-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  if (S.recording){ toast('Stop recording before changing the frame.'); return; }
+  S.ar=b.dataset.ar; [...$('ar-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); });
+$('res-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  if (S.recording){ toast('Stop recording before changing quality.'); return; }
+  S.res=b.dataset.res; [...$('res-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); startCamera(); checkExportWarning(); });
+
+// camera controls
+$('fit-cover').addEventListener('click', () => { S.fit='cover'; $('fit-cover').classList.add('on'); $('fit-contain').classList.remove('on'); });
+$('fit-contain').addEventListener('click', () => { S.fit='contain'; $('fit-contain').classList.add('on'); $('fit-cover').classList.remove('on'); });
+$('mirror-btn').addEventListener('click', () => { S.mirror=!S.mirror; $('mirror-btn').classList.toggle('on', S.mirror); });
+$('zoom').addEventListener('input', e => { S.camScale=e.target.value/100; $('zoom-val').textContent=S.camScale.toFixed(2)+'×'; });
+
+// NOTE camScale lives on drawCam via opt.scale → pass it in mode draws:
+//  override draw functions to include zoom
+// (re-bind by wrapping: simplest is to read S.camScale inside drawCam calls)
+// We patch the mode draws to pass scale:
+draw_normal = function(){ drawCam(0,0,canvasDims.w,canvasDims.h,{ panX:S.camPanX, panY:S.camPanY, scale:S.camScale }); };
+draw_split = function(){
+  const {w,h}=canvasDims; const divY=Math.round(h*S.splitDivider);
+  drawMedia(0,0,w,divY,S.splitTopPanX,S.splitTopPanY);
+  drawCam(0,divY,w,h-divY,{ panX:S.splitBotPanX, panY:S.splitBotPanY, scale:S.camScale });
+  ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(0,divY-1,w,2);
+};
+draw_pip = function(){
+  const {w,h}=canvasDims; drawMedia(0,0,w,h,0,0);
+  const box=pipBox();
+  ctx.save(); ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=18; ctx.shadowOffsetY=6;
+  ctx.fillStyle='#000'; roundRectPath(ctx,box.x,box.y,box.w,box.h,box.r); ctx.fill(); ctx.restore();
+  drawCam(box.x,box.y,box.w,box.h,{ panX:S.camPanX, panY:S.camPanY, scale:S.camScale, radius:box.r });
+};
+
+// filters
+$('filters').addEventListener('input', e => {
+  const inp = e.target.closest('input[data-filter]'); if(!inp) return;
+  const key = inp.dataset.filter; const v = parseFloat(inp.value);
+  S.f[key] = v;
+  const label = inp.closest('.field').querySelector('[data-fval]');
+  label.textContent = key==='hue' ? v+'°' : (key==='brightness'||key==='contrast'||key==='saturate') ? (v-100>0?'+':'')+(v-100) : v;
+  rebuildFilters();
+});
+$('filters-reset').addEventListener('click', () => {
+  S.f = { brightness:100, contrast:100, saturate:100, hue:0, temp:0, exposure:0, blur:0, sharpen:0 };
+  $('filters').querySelectorAll('input[data-filter]').forEach(inp => {
+    const k=inp.dataset.filter; inp.value=S.f[k];
+    inp.closest('.field').querySelector('[data-fval]').textContent = k==='hue'?'0°':'0';
+  });
+  rebuildFilters();
+});
+
+// pip layout
+$('pipsize').addEventListener('input', e => { S.pip.w=e.target.value/100; $('pipsize-val').textContent=e.target.value+'%'; });
+$('piprad').addEventListener('input', e => { S.pip.radius=e.target.value/100; $('piprad-val').textContent=e.target.value+'%'; });
+$('pip-snap').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  const box=pipBox(); const m=0.04;
+  const wN=box.w/canvasDims.w, hN=box.h/canvasDims.h;
+  const map={ tl:[m,m], tr:[1-wN-m,m], bl:[m,1-hN-m], br:[1-wN-m,1-hN-m] };
+  [S.pip.x,S.pip.y]=map[b.dataset.snap];
+});
+$('pip-ar').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  S.pip.ar=b.dataset.par; [...$('pip-ar').children].forEach(x=>x.classList.toggle('on',x===b)); });
+
+// audio
+$('micvol').addEventListener('input', e => { S.micVol=e.target.value/100; $('micvol-val').textContent=e.target.value+'%'; if(micGain)micGain.gain.value=S.micVol; });
+$('impvol').addEventListener('input', e => { S.importVol=e.target.value/100; $('impvol-val').textContent=e.target.value+'%'; if(importGain)importGain.gain.value=S.importVol; });
+
+// import
+$('drop').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', e => { ensureAudio(); if(audioCtx.state==='suspended')audioCtx.resume(); loadFile(e.target.files[0]); });
+['dragover','dragenter'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+$('drop').addEventListener('drop', e => { ensureAudio(); if(audioCtx.state==='suspended')audioCtx.resume(); loadFile(e.dataTransfer.files[0]); });
+$('imp-play').addEventListener('click', () => {
+  if (S.mediaKind!=='video') return;
+  if (importVid.paused){ ensureImportAudio(); if(audioCtx.state==='suspended')audioCtx.resume(); importVid.play(); S.importPlaying=true; }
+  else { importVid.pause(); S.importPlaying=false; }
+  updateImpPlayBtn();
+});
+$('imp-clear').addEventListener('click', clearImport);
+$('scrub').addEventListener('pointerdown', e => {
+  if (S.mediaKind!=='video') return;
+  const r=$('scrub').getBoundingClientRect();
+  importVid.currentTime = clamp((e.clientX-r.left)/r.width,0,1)*(importVid.duration||0);
+});
+
+// export
+$('exp-res').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  S.expRes=b.dataset.eres; [...$('exp-res').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
+$('exp-bitrate').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  S.expBitrate=+b.dataset.ebr; [...$('exp-bitrate').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
+$('export-btn').addEventListener('click', exportAll);
+
+// panels collapse
+document.querySelectorAll('[data-panel] .panel-h').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed')));
+
+// controls
+$('rec-btn').addEventListener('click', toggleRecording);
+$('undo-btn').addEventListener('click', undoClip);
+$('mic-btn').addEventListener('click', toggleMic);
+$('edit-btn').addEventListener('click', openEditor);
+$('edit-launch').addEventListener('click', openEditor);
+function toggleMic(){
+  S.micEnabled=!S.micEnabled;
+  if (micStream){ const at=micStream.getAudioTracks()[0]; if(at) at.enabled=S.micEnabled; }
+  $('mic-btn').classList.toggle('muted', !S.micEnabled);
+  $('mic-btn').title = S.micEnabled?'Mute mic (M)':'Unmute mic (M)';
+}
+
+// editor controls
+$('ed-back').addEventListener('click', closeEditor);
+$('ed-play').addEventListener('click', edPlayPause);
+$('ed-prev').addEventListener('click', () => loadClip(pvIndex-1, false));
+$('ed-next').addEventListener('click', () => loadClip(pvIndex+1, false));
+$('ed-restart').addEventListener('click', () => { loadClip(0,false); const c=S.clips[0]; if(c) pvVid.currentTime=c.trimStart; });
+$('ed-move-l').addEventListener('click', () => moveClip(-1));
+$('ed-move-r').addEventListener('click', () => moveClip(1));
+$('ed-delete').addEventListener('click', deleteClip);
+$('ed-split').addEventListener('click', splitClip);
+$('speed-row').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  const clip=S.clips[pvIndex]; clip.speed=parseFloat(b.dataset.spd); pvVid.playbackRate=clip.speed;
+  rebuildOffsets(); rebuildScrubMarks(); syncClipUI(); });
+$('ed-vol').addEventListener('input', e => { pvVid.volume = e.target.value/100; });
+
+// keyboard
+window.addEventListener('keydown', e => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if (e.key === 'Escape' && S.editOpen){ closeEditor(); return; }
+  if (typing) return;
+  if (S.editOpen){
+    if (e.key==='ArrowLeft'){ e.preventDefault(); loadClip(pvIndex-1,false); }
+    else if (e.key==='ArrowRight'){ e.preventDefault(); loadClip(pvIndex+1,false); }
+    else if (e.code==='Space'){ e.preventDefault(); edPlayPause(); }
+    return;
+  }
+  if (e.code==='Space'){ e.preventDefault(); toggleRecording(); }
+  else if (e.key==='m' || e.key==='M'){ toggleMic(); }
+  else if (e.key==='p' || e.key==='P'){ openEditor(); }
+  else if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undoClip(); }
+});
+
+// keep export warning fresh
+const _origAddClip = addClip;
+// (checkExportWarning called from refreshClipDependentUI path)
+const _origRefresh = refreshClipDependentUI;
+refreshClipDependentUI = function(){ _origRefresh(); checkExportWarning(); };
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+applyOutputDims();
+rebuildFilters();
+updateImpPlayBtn();
+setMode(MODES.NORMAL);
+startRenderLoop();
+startCamera();
+
+// expose a tiny bit for debugging in console
+window.__meatcord = { S, get clips(){ return S.clips; } };
+
+});
+</script>
+</body>
+</html>
