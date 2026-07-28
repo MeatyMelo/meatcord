@@ -102,6 +102,10 @@
     border:1px solid rgba(245,177,61,.4); color:var(--warn); border-radius:99px; font-size:12px;
   }
   .warn-pill.show{display:block}
+  /* second pill stacks above the first so both can show at once */
+  .perf-pill{bottom:52px;background:rgba(196,30,42,.14);border-color:rgba(196,30,42,.5);color:#ff9ba2}
+  .hud-fps{margin-left:8px;opacity:.65;font-variant-numeric:tabular-nums}
+  .hud-fps.bad{opacity:1;color:var(--rec);font-weight:600}
 
   /* ---- Side panel ---- */
   .side{
@@ -146,6 +150,8 @@
     transition:background .12s,border-color .12s; width:100%;
   }
   .btn:hover{background:var(--surface-3)}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn:disabled:hover{background:var(--surface-2)}
   .btn.on{border-color:var(--rec-deep);color:#fff;background:rgba(196,30,42,.18)}
   .btn-row{display:flex;gap:6px}
   .btn-row .btn{width:auto;flex:1}
@@ -366,8 +372,9 @@
     <div class="stage" id="stage">
       <canvas class="stage-canvas" id="canvas"></canvas>
       <div class="stage-empty" id="stage-empty">Allow camera access to begin. Import media for Split &amp; PiP modes.</div>
-      <div class="rec-hud" id="rec-hud"><span class="blink"></span><span id="rec-hud-time">0:00</span></div>
+      <div class="rec-hud" id="rec-hud"><span class="blink"></span><span id="rec-hud-time">0:00</span><span class="hud-fps" id="rec-hud-fps"></span></div>
       <div class="warn-pill" id="warn-pill"></div>
+      <div class="warn-pill perf-pill" id="perf-pill"></div>
     </div>
 
     <!-- SIDE PANEL -->
@@ -388,6 +395,32 @@
             <input type="range" id="zoom" min="30" max="300" value="100">
           </div>
           <div class="field" style="color:var(--text-faint);font-size:11.5px">Drag on the preview to pan the camera.</div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel>
+        <button class="panel-h">Recording <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <label>Capture frame rate <span class="val" id="rec-fps-hint">30 is plenty for talking head</span></label>
+            <div class="chips" id="rec-fps">
+              <button class="chip on" data-rfps="30">30 fps</button>
+              <button class="chip" data-rfps="60">60 fps</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Capture bitrate <span class="val" id="rec-br-hint">quality ceiling for every take</span></label>
+            <div class="chips" id="rec-bitrate">
+              <button class="chip on" data-rbr="auto">Auto</button>
+              <button class="chip" data-rbr="24">24M</button>
+              <button class="chip" data-rbr="40">40M</button>
+              <button class="chip" data-rbr="80">80M</button>
+            </div>
+          </div>
+          <div class="media-info" id="rec-note"></div>
+          <div class="field" style="color:var(--text-faint);font-size:11.5px;margin-top:8px">
+            Clips are an intermediate — they get re-encoded on export, so detail lost here can't be recovered. Higher costs disk space during the session only.
+          </div>
         </div>
       </section>
 
@@ -486,6 +519,13 @@
             </div>
           </div>
           <div class="field">
+            <label>Frame rate</label>
+            <div class="chips" id="exp-fps">
+              <button class="chip on" data-efps="30">30 fps</button>
+              <button class="chip" data-efps="60">60 fps</button>
+            </div>
+          </div>
+          <div class="field">
             <label>Bitrate <span class="val" id="exp-br-hint">higher = sharper, bigger file</span></label>
             <div class="chips" id="exp-bitrate">
               <button class="chip" data-ebr="8">8M</button>
@@ -495,6 +535,7 @@
             </div>
           </div>
           <button class="btn" id="export-btn" style="border-color:var(--rec-deep)">Export all clips</button>
+          <button class="btn" id="export-sep-btn" style="margin-top:6px" title="One MP4 per clip, numbered in timeline order — trims and speed applied.">Export clips separately</button>
           <div class="media-info" id="export-note"></div>
         </div>
       </section>
@@ -2516,20 +2557,29 @@ document.addEventListener('DOMContentLoaded', () => {
    ============================================================ */
 const MODES = { NORMAL:'normal', SPLIT:'split', PIP:'pip' };
 const RES   = { '720p':720, '1080p':1080, '1440p':1440, '4K':2160 };
+/* Near-transparent intermediate bitrates. Well above any delivery bitrate —
+   generation-one loss is unrecoverable — but deliberately NOT maxed out: these
+   go through a software encoder in real time, and starving the CPU costs you
+   dropped frames, which look far worse than a little extra compression. */
+const REC_BR_AUTO = { '720p':16, '1080p':32, '1440p':48, '4K':64 };
 const ARS   = { '9:16':[9,16], '16:9':[16,9], '1:1':[1,1], '4:3':[4,3] };
 const TARGET_FPS = 30;
 const FRAME_MS = 1000 / TARGET_FPS;
 // While a take is rolling, draw the canvas at a lower rate to free up CPU/GPU
 // on long recordings. The canvas IS the recorded surface, so recorded motion
 // is capped at this rate too.
-const RECORD_FPS = 24;                   // Split/PiP canvas-record rate (talking-head smoothness vs GPU)
-const RECORD_FRAME_MS = 1000 / RECORD_FPS;
+/* Capture and export frame rates live in S (S.recFps / S.expFps) so 60fps is a
+   user choice. They should MATCH: export resamples onto an S.expFps grid, so a
+   lower capture rate makes every Nth frame duplicate — 60fps output from a 30fps
+   take is a bigger file with identical motion, not smoother video. */
+const FPS_CHOICES = [30, 60];
 // The LIVE preview canvas renders at a capped short-side resolution. Drawing a
 // full 1440p/4K canvas every frame just to show an on-screen preview is the
 // single biggest waste. Normal records the raw camera track (canvas never in the
 // record path), and Split/PiP swap UP to full output res only while recording,
 // so nothing about EXPORT quality changes.
 const PREVIEW_CAP = 720;
+const PREVIEW_MIN = 240;                 // floor so a tiny window still previews legibly
 const MAX_REC_MS = 30 * 60 * 1000;       // 30 minutes
 const WARN_4K_SECONDS = 120;             // warn for long 4K timelines
 
@@ -2546,8 +2596,24 @@ const S = {
   mode: MODES.NORMAL,
   ar: '9:16',
   res: '1080p',
+  recFps: 30,                   // capture frame rate
+  expFps: 30,                   // export grid frame rate
+  recBitrate: 'auto',           // RECORDING bitrate in Mbps, or 'auto' (scales with res).
+                                // Clips are an intermediate that gets re-encoded at export,
+                                // so this wants to be generous — detail thrown away here is
+                                // gone for good, no matter how high the export bitrate is.
   expRes: '1080p',
   expBitrate: 16,               // export video bitrate in Mbps (MediaRecorder default is far too low)
+  // Export resolution/fps are otherwise independent of capture — that's needed
+  // so raising Quality mid-session doesn't force a re-export at a size you didn't
+  // ask for. But it also means the export chips can be left behind: raise the
+  // top-bar Quality (or capture fps) and the FINAL file silently stays wherever
+  // Export was last set, since exportWebCodecs sizes its canvas from S.expRes,
+  // never S.res. These flags make Export trail the capture setting until the
+  // user explicitly touches an Export chip themselves — at that point it's a
+  // deliberate choice and auto-follow gets out of the way for that axis.
+  expResFollowsCapture: true,
+  expFpsFollowsCapture: true,
 
   camReady: false,
   mirror: false,
@@ -2583,14 +2649,35 @@ const S = {
    DOM REFS
    ============================================================ */
 const canvas   = $('canvas');
-const ctx      = canvas.getContext('2d', { alpha:false });
 const camVid   = $('cam-vid');
 const importVid= $('import-vid');
 const exCanvas = $('export-canvas');
-const exCtx    = exCanvas.getContext('2d', { alpha:false });
 const workCv   = $('work-canvas');
-const workCtx  = workCv.getContext('2d');
 const stage    = $('stage');
+
+/* Assigning canvas.width/height RESETS the whole 2D context state — including
+   imageSmoothingQuality. Every resize must re-apply it, so all context setup
+   goes through hq(). 'high' is the difference between a boxy nearest-ish
+   downscale and a properly filtered one, and every path here downscales
+   (camera → preview, clip → export). It costs nothing on a draw that isn't
+   scaling down. */
+function hq(c){ c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; return c; }
+const ctx      = hq(canvas.getContext('2d', { alpha:false }));
+const exCtx    = hq(exCanvas.getContext('2d', { alpha:false }));
+const workCtx  = hq(workCv.getContext('2d'));
+
+/* Elements read every frame. getElementById in a RAF body is a per-frame hash
+   lookup + string compare for something that never changes. */
+const EL = {
+  timer:     $('timer'),
+  hudTime:   $('rec-hud-time'),
+  hudFps:    $('rec-hud-fps'),
+  perfPill:  $('perf-pill'),
+  trimPlay:  $('trim-play'),
+  edFill:    $('ed-scrub-fill'),
+  edPlayhead:$('ed-scrub-play'),
+  edTime:    $('ed-time'),
+};
 
 let canvasDims = { w:1080, h:1920 };
 let S_snapGuides = [];          // active snap guide lines drawn while dragging
@@ -2612,7 +2699,8 @@ async function startCamera(){
     // chosen quality (short side = V) and let the webcam deliver its own
     // native aspect ratio; the canvas then frames the full picture.
     micStream = await navigator.mediaDevices.getUserMedia({
-      video: { width:{ ideal: Math.round(V*16/9) }, height:{ ideal: V } },
+      video: { width:{ ideal: Math.round(V*16/9) }, height:{ ideal: V },
+               frameRate:{ ideal: S.recFps } },
       audio: { echoCancellation:true, noiseSuppression:true }
     });
     camVid.srcObject = micStream;
@@ -2624,6 +2712,7 @@ async function startCamera(){
     $('stage-empty').style.display = 'none';
     // reconnect mic into audio graph if it already exists
     reconnectMic();
+    pumpCamFrames();          // (re)arm the new-frame signal on this track
     updateActualRes();
   } catch (err) {
     toast('Camera/mic blocked. Grant permission and reload. Needs https or localhost.', true);
@@ -2631,8 +2720,22 @@ async function startCamera(){
   }
 }
 
+/* What the camera ACTUALLY negotiated — getUserMedia treats frameRate as a
+   hint, so asking for 60 at 4K commonly still yields 30. */
+function camTrackFps(){
+  try {
+    const t = micStream && micStream.getVideoTracks()[0];
+    const r = t && t.getSettings && t.getSettings().frameRate;
+    return r ? Math.round(r) : 0;
+  } catch(e){ return 0; }
+}
+
 function updateActualRes(){
-  if (camVid.videoWidth) $('actual-res').textContent = camVid.videoWidth+'×'+camVid.videoHeight+' cam';
+  if (camVid.videoWidth){
+    const f = camTrackFps();
+    $('actual-res').textContent = camVid.videoWidth+'×'+camVid.videoHeight+(f?' @'+f:'')+' cam';
+  }
+  checkExportWarning();   // camera res feeds the "can't supply this resolution" warning
 }
 
 /* ============================================================
@@ -2654,19 +2757,61 @@ function applyOutputDims(){
 // Capped preview dimensions: scale the true output down so its short side is
 // <= PREVIEW_CAP, preserving aspect. All on-canvas geometry is normalized, so
 // this is purely a pixel-count reduction with no effect on framing or export.
-function previewDims(){
+//
+// PREVIEW_CAP alone still overdraws badly: on a laptop the stage often shows the
+// canvas ~450px tall, so a 720-short-side backing store is ~2.5x more pixels than
+// the display can even show. Size to what is actually on screen (CSS box ×
+// devicePixelRatio) and let PREVIEW_CAP be the ceiling, not the target. Sharpness
+// is unchanged — one backing pixel per device pixel is exactly native.
+function previewDims(box){
   const full = outputDims(S.res);
-  const short = Math.min(full.w, full.h);
-  if (short <= PREVIEW_CAP) return full;
-  const k = PREVIEW_CAP / short;
+  const shortFull = Math.min(full.w, full.h);
+  let cap = PREVIEW_CAP;
+  box = box || stage;
+  const avW = box.clientWidth - 28, avH = box.clientHeight - 28;       // minus stage padding
+  if (avW > 8 && avH > 8){
+    const k   = Math.min(avW / full.w, avH / full.h);                  // full → displayed CSS scale
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cap = Math.min(cap, Math.max(PREVIEW_MIN, Math.round(shortFull * k * dpr)));
+  }
+  if (shortFull <= cap) return full;
+  const k = cap / shortFull;
   return { w: Math.round(full.w * k), h: Math.round(full.h * k) };
 }
 function setCanvasDims(dims){
   canvasDims = dims;
   canvas.width = dims.w;
   canvas.height = dims.h;
+  hq(ctx);                     // the resize just wiped the context state
   invalidateRect();
 }
+
+/* The stage box drives previewDims, so re-fit when it changes (window resize,
+   side panel wrapping, mobile layout flip). Never while recording — the canvas is
+   the capture surface then and resizing it mid-take would break the stream.
+   Ignore small changes so a drag-resize doesn't reallocate the backing store on
+   every frame of the drag. */
+let fitPending = false;
+function refitPreview(){
+  if (S.recording || fitPending) return;
+  fitPending = true;
+  requestAnimationFrame(() => {
+    fitPending = false;
+    if (S.recording || S.editOpen) return;
+    const want = previewDims();
+    if (Math.abs(want.h - canvasDims.h) > canvasDims.h * 0.08) setCanvasDims(want);
+  });
+}
+// ResizeObserver catches layout changes the window never hears about (panel
+// wrap, mobile flip); the window listener is the fallback where it's missing.
+// Keep the instance in a variable — an unreferenced observer is a GC question
+// nobody should have to answer.
+let stageRO = null;
+if (typeof ResizeObserver === 'function'){
+  stageRO = new ResizeObserver(refitPreview);
+  stageRO.observe(stage);
+}
+window.addEventListener('resize', refitPreview);
 
 /* ============================================================
    FILTERS — cached string + computed default flag
@@ -2940,13 +3085,13 @@ function drawMedia(dx, dy, dw, dh, panX, panY){
    MODE DRAW FUNCTIONS — one each, no scattered if(mode===)
    ============================================================ */
 function draw_normal(){
-  drawCam(0, 0, canvasDims.w, canvasDims.h, { panX:S.camPanX, panY:S.camPanY });
+  drawCam(0, 0, canvasDims.w, canvasDims.h, { panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
 }
 function draw_split(){
   const { w, h } = canvasDims;
   const divY = Math.round(h * S.splitDivider);
   drawMedia(0, 0, w, divY, S.splitTopPanX, S.splitTopPanY);          // top = imported
-  drawCam(0, divY, w, h - divY, { panX:S.splitBotPanX, panY:S.splitBotPanY }); // bottom = cam
+  drawCam(0, divY, w, h - divY, { panX:S.splitBotPanX, panY:S.splitBotPanY, scale:S.camScale }); // bottom = cam
   // divider line
   ctx.fillStyle = 'rgba(255,255,255,.18)';
   ctx.fillRect(0, divY-1, w, 2);
@@ -2961,7 +3106,8 @@ function draw_pip(){
   ctx.fillStyle = '#000';
   roundRectPath(ctx, box.x, box.y, box.w, box.h, box.r); ctx.fill();
   ctx.restore();
-  drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r }); // cover-cropped cam
+  // cover-cropped cam, pannable inside its box
+  drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r, panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
 }
 
 /* compute pip box in canvas px from normalized state */
@@ -2996,15 +3142,66 @@ function drawFrame(){
   drawSnapGuides();
 }
 
+/* Real composited frame rate. captureStream only emits a frame when the canvas
+   actually changes, so if drawFrame can't hit S.recFps the recording IS that
+   slow — this is the number that tells you a take will come out choppy. */
+let fpsStamps = [], fpsLastUi = 0, measuredFps = 0;
+function noteFrame(now){
+  fpsStamps.push(now);
+  while (fpsStamps.length && now - fpsStamps[0] > 1000) fpsStamps.shift();
+  if (now - fpsLastUi < 400) return;
+  fpsLastUi = now;
+  measuredFps = fpsStamps.length;
+  updatePerfHud();
+}
+function updatePerfHud(){
+  const el = EL.hudFps; if (!el) return;
+  const target = (S.recording && S.mode !== MODES.NORMAL) ? S.recFps : TARGET_FPS;
+  const struggling = S.recording && measuredFps > 0 && measuredFps < target * 0.85;
+  el.textContent = measuredFps + ' fps';
+  el.classList.toggle('bad', struggling);
+  const pill = EL.perfPill;
+  if (pill){
+    pill.classList.toggle('show', struggling && S.mode !== MODES.NORMAL);
+    if (struggling) pill.textContent =
+      'Dropping frames — compositing at '+measuredFps+' of '+target+' fps. Lower Quality to '+
+      (S.res==='4K' ? '1440p' : '1080p')+(S.filtersDefault ? '' : ' or turn off Filters')+'.';
+  }
+}
+
+/* A new camera frame is the only thing that makes an idle preview stale. rAF
+   fires at display rate (often 60/120/144Hz) while the camera delivers 24–30, so
+   the throttled loop still re-drew the SAME frame repeatedly — pure waste at
+   1080p+. requestVideoFrameCallback tells us when there's actually something new.
+   camFrameSignal stays false where rVFC is missing, and the loop then behaves
+   exactly as before. */
+let camFrameDirty = true, camFrameSignal = false, camRVFC = 0, lastDrawAt = 0;
+function pumpCamFrames(){
+  if (!camVid.requestVideoFrameCallback) return;
+  if (camRVFC){ try { camVid.cancelVideoFrameCallback(camRVFC); } catch(e){} camRVFC = 0; }
+  camFrameSignal = true;
+  const on = () => { camFrameDirty = true; camRVFC = camVid.requestVideoFrameCallback(on); };
+  camRVFC = camVid.requestVideoFrameCallback(on);
+}
+
 function renderLoop(now){
   if (S.editOpen) return;                 // hard gate — editor owns the screen
   S.recRAF = requestAnimationFrame(renderLoop);
   // Throttle ONLY when the canvas is the recording surface (Split/PiP). Normal
   // records the raw camera track, so its preview can stay at full smoothness.
-  const interval = (S.recording && S.mode !== MODES.NORMAL) ? RECORD_FRAME_MS : FRAME_MS;
+  const interval = (S.recording && S.mode !== MODES.NORMAL) ? (1000 / S.recFps) : FRAME_MS;
   if (now - lastFrameTime < interval) return;
+  // Recording keeps drawing unconditionally — the canvas IS the captured surface
+  // in Split/PiP and its frame cadence must not depend on this heuristic.
+  if (!S.recording && camFrameSignal && !camFrameDirty && !drag && !S.importPlaying
+      && now - lastDrawAt < 200){                 // heartbeat bounds any staleness
+    return;
+  }
   lastFrameTime = now;
+  lastDrawAt = now;
+  camFrameDirty = false;
   drawFrame();
+  noteFrame(now);
   if (S.recording) updateRecTimer();
 }
 function startRenderLoop(){
@@ -3065,6 +3262,21 @@ function pickMime(){
   return 'video/webm';
 }
 
+/* RECORDING codec — speed first, not efficiency.
+   MediaRecorder on a canvas stream encodes in SOFTWARE, and libvpx VP9 is
+   several times slower than VP8 at the same resolution. At 1440p/4K, VP9 simply
+   cannot sustain 30fps on a typical machine: the encoder backs up, captureStream
+   drops frames, and the take comes out choppy.
+   Clips here are a throwaway intermediate that gets re-encoded to H.264 at
+   export, so VP9's better compression buys nothing — we'd rather spend the bits
+   and keep the frames. VP8 at a high bitrate is both faster AND (because it
+   isn't dropping frames) visibly better. */
+function pickRecordMime(){
+  const opts = ['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
+  for (const m of opts) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return 'video/webm';
+}
+
 /* Export prefers MP4 (H.264 + AAC) so the file drops straight into TikTok / IG /
    YouTube / an NLE without a convert step. Native MediaRecorder MP4 support is
    recent and version-dependent, so we probe real codec strings and fall back to
@@ -3084,8 +3296,14 @@ function pickExportMime(){
   return { mime:'video/webm', ext:'webm', mp4:false };
 }
 
+/* Resolves the Recording-panel choice to a number. 'auto' tracks the capture
+   resolution so switching Quality doesn't silently starve the encoder. */
+function recordBitrateMbps(){
+  return S.recBitrate === 'auto' ? (REC_BR_AUTO[S.res] || 40) : S.recBitrate;
+}
+
 function buildRecordStream(){
-  const cs = canvas.captureStream(RECORD_FPS);   // MUST precede MediaRecorder
+  const cs = canvas.captureStream(S.recFps);     // MUST precede MediaRecorder
   const stream = new MediaStream();
   cs.getVideoTracks().forEach(t => stream.addTrack(t));
   ensureAudio();
@@ -3124,12 +3342,28 @@ function startRecording(){
   }
 
   const stream = isRaw ? buildRawRecordStream() : buildRecordStream();
+  // THE quality fix: without an explicit videoBitsPerSecond, Chrome records at
+  // roughly 2.5 Mbps whatever the resolution — so a 4K take was being written at
+  // a bitrate meant for a thumbnail, and no export setting could bring it back.
+  const recOpts = {
+    mimeType: pickRecordMime(),
+    videoBitsPerSecond: Math.round(recordBitrateMbps() * 1e6),
+    audioBitsPerSecond: 192000,
+  };
   try {
-    mediaRecorder = new MediaRecorder(stream, { mimeType: pickMime() });
+    mediaRecorder = new MediaRecorder(stream, recOpts);
   } catch(e){
-    toast('Recording not supported in this browser.', true);
-    if (!isRaw) setCanvasDims(previewDims());   // undo the resize on failure
-    return;
+    // Some builds reject an explicit bitrate for a given codec. Never lose the
+    // take over it — retry at defaults and warn instead.
+    console.warn('Recorder rejected explicit bitrate, using browser default:', e);
+    try {
+      mediaRecorder = new MediaRecorder(stream, { mimeType: pickRecordMime() });
+      toast('Browser refused the record bitrate — using its default (softer).', true);
+    } catch(e2){
+      toast('Recording not supported in this browser.', true);
+      if (!isRaw) setCanvasDims(previewDims());   // undo the resize on failure
+      return;
+    }
   }
 
   recChunks = [];
@@ -3138,6 +3372,8 @@ function startRecording(){
   mediaRecorder.onstop = () => {
     // wait for onstop before assembling — late chunks already flushed here
     const blob = new Blob(recChunks, { type:'video/webm' });
+    recChunks = [];      // the Blob owns the data now; don't hold a second reference
+                         // to a whole take until the next record starts
     const dur = (performance.now() - S.recStart) / 1000;
     addClip(blob, dur, importStartT, isRaw, isRaw ? snapshotLook() : null);
   };
@@ -3166,11 +3402,12 @@ function stopRecording(){
 
 function toggleRecording(){ S.recording ? stopRecording() : startRecording(); }
 
+let _timerLast = '';
 function updateRecTimer(){
   const t = (performance.now() - S.recStart) / 1000;
   const str = fmt(t);
   // skip DOM writes when unchanged
-  if ($('timer')._last !== str){ $('timer').textContent = str; $('rec-hud-time').textContent = str; $('timer')._last = str; }
+  if (_timerLast !== str){ EL.timer.textContent = str; EL.hudTime.textContent = str; _timerLast = str; }
   if (t*1000 >= MAX_REC_MS) stopRecording();
 }
 
@@ -3178,7 +3415,8 @@ function reflectRecordingUI(on){
   $('rec-btn').classList.toggle('recording', on);
   $('rec-btn').setAttribute('aria-label', on ? 'Stop recording' : 'Start recording');
   $('rec-hud').classList.toggle('live', on);
-  if (!on){ $('timer').textContent = '0:00'; $('timer')._last='0:00'; }
+  if (!on){ if (EL.perfPill) EL.perfPill.classList.remove('show'); }
+  if (!on){ EL.timer.textContent = '0:00'; _timerLast = '0:00'; }
 }
 
 /* ============================================================
@@ -3210,8 +3448,7 @@ function addClip(blob, duration, importStart, raw, look){
 
 function undoClip(){
   if (S.recording || !S.clips.length) return;
-  const clip = S.clips.pop();
-  delete waveCache[clip.id];        // the take is gone → its waveform leaves no trace
+  const clip = S.clips.pop();       // waveCache is a WeakMap on the blob — it goes with it
   // restore imported video to where it was when that clip started
   if (clip.importStart != null && S.hasMedia && S.mediaKind === 'video'){
     try { importVid.currentTime = clip.importStart; } catch(e){}
@@ -3227,14 +3464,20 @@ function generateThumb(clip){
   v.muted = true; v.playsInline = true;
   const url = URL.createObjectURL(clip.blob);
   v.src = url;
-  const done = () => { try{ URL.revokeObjectURL(url); }catch(e){} };
+  // Release the URL *and* detach the source, so the decoder for this throwaway
+  // element goes away immediately instead of waiting on GC. One of these is
+  // created per take.
+  const done = () => {
+    try { URL.revokeObjectURL(url); } catch(e){}
+    try { v.removeAttribute('src'); v.load(); } catch(e){}
+  };
   v.addEventListener('loadeddata', () => {
     try { v.currentTime = Math.min(0.05, (v.duration||1)/2); } catch(e){ done(); }
   });
   v.addEventListener('seeked', () => {
     try {
       const tw = 80, th = Math.round(tw * (canvasDims.h/canvasDims.w));
-      workCv.width = tw; workCv.height = th;
+      workCv.width = tw; workCv.height = th; hq(workCtx);   // resize wipes ctx state
       if (clip.raw){
         workCtx.fillStyle = '#000'; workCtx.fillRect(0,0,tw,th);
         compositeCam(workCtx, v, 0, 0, tw, th, clip.look);
@@ -3254,6 +3497,7 @@ function refreshClipDependentUI(){
   $('undo-btn').disabled = !has || S.recording;
   $('edit-btn').disabled = !has;
   $('edit-launch').style.display = has ? '' : 'none';
+  checkExportWarning();          // clip count/duration feeds the export estimate
 }
 
 /* ============================================================
@@ -3317,6 +3561,8 @@ function clearImport(){
   importImg = null;
   S.hasMedia = false; S.mediaKind = null; S.importPlaying = false;
   importVid.pause(); importVid.removeAttribute('src'); importVid.load && importVid.load();
+  filmGen++;                                  // retire any in-flight filmstrip build
+  $('scrub-film').innerHTML = '';
   $('media-info').textContent = '';
   $('video-tools').style.display = 'none';
   if (S.mode !== MODES.NORMAL) toast('Imported media removed.');
@@ -3349,23 +3595,43 @@ function clearImportKeepGraph(){
   importImg = null; S.hasMedia=false; S.mediaKind=null;
 }
 
-/* filmstrip thumbnails for the scrub bar */
+/* Filmstrip thumbnails for the scrub bar.
+   Ten sequential seeks take a while, so a second import started mid-build used to
+   append its neighbour's frames into the live strip. A generation token retires
+   the stale run at every await point, and the scratch <video> is always torn down
+   so its decoder and the source don't outlive the build. */
+let filmGen = 0;
 async function buildFilmstrip(){
+  const gen = ++filmGen;
   const film = $('scrub-film'); film.innerHTML = '';
   const N = 10, dur = importVid.duration || 1;
   const tmp = document.createElement('video');
-  tmp.muted = true; tmp.src = importVid.src;
-  await new Promise(r => tmp.addEventListener('loadeddata', r, { once:true }));
-  const cw = 48, ch = 34;
-  const c = document.createElement('canvas'); c.width=cw; c.height=ch; const cc = c.getContext('2d');
-  for (let i=0;i<N;i++){
-    const t = dur * (i+0.5)/N;
-    await new Promise(res => {
-      const onSeek = () => { try{ cc.drawImage(tmp,0,0,cw,ch); const img=new Image(); img.src=c.toDataURL('image/jpeg',0.5); film.appendChild(img);}catch(e){} res(); };
-      tmp.addEventListener('seeked', onSeek, { once:true });
-      try { tmp.currentTime = t; } catch(e){ res(); }
+  tmp.muted = true; tmp.preload = 'auto'; tmp.src = importVid.src;
+  try {
+    await new Promise((res, rej) => {
+      tmp.addEventListener('loadeddata', res, { once:true });
+      tmp.addEventListener('error', () => rej(new Error('filmstrip source failed')), { once:true });
     });
-  }
+    if (gen !== filmGen) return;
+    const cw = 48, ch = 34;
+    const c = document.createElement('canvas'); c.width=cw; c.height=ch;
+    const cc = hq(c.getContext('2d'));
+    for (let i=0;i<N;i++){
+      const t = dur * (i+0.5)/N;
+      await new Promise(res => {
+        const onSeek = () => {
+          if (gen === filmGen){
+            try { cc.drawImage(tmp,0,0,cw,ch); const img=new Image(); img.src=c.toDataURL('image/jpeg',0.5); film.appendChild(img); } catch(e){}
+          }
+          res();
+        };
+        tmp.addEventListener('seeked', onSeek, { once:true });
+        try { tmp.currentTime = t; } catch(e){ res(); }
+      });
+      if (gen !== filmGen) return;
+    }
+  } catch(e){ /* strip is cosmetic — never let it break the import */ }
+  finally { try { tmp.pause(); tmp.removeAttribute('src'); tmp.load(); } catch(e){} }
 }
 
 function updateScrubPlayhead(){
@@ -3469,12 +3735,18 @@ canvas.addEventListener('pointercancel', endDrag);
    ============================================================ */
 const pvVid = $('preview-vid');
 const pvCv  = $('preview-cv');
-const pvCtx = pvCv.getContext('2d', { alpha:false });
+const pvCtx = hq(pvCv.getContext('2d', { alpha:false }));
+const edStage = pvCv.parentElement;      // .ed-stage — sizes the editor preview
 let pvBlobUrls = [];
 let pvClipOffsets = [];      // cumulative effective (trimmed/speed) durations
 let pvIndex = 0;
 let pvTotal = 0;
-let waveCache = {};          // clip.id -> peak-envelope Float32Array (keyed by id, never index)
+/* clip.blob -> peak-envelope Float32Array. Keyed by the BLOB, not an id or an
+   index: the envelope describes the recorded file, so the two halves of a split
+   (which share one blob and one full-length time axis) hit the cache instead of
+   each decoding the same take again. A WeakMap also means a deleted or undone
+   clip's envelope is collected with its blob — no manual invalidation to forget. */
+const waveCache = new WeakMap();
 let pvPlaying = false;
 
 function effDur(clip){ return (clip.trimEnd - clip.trimStart) / clip.speed; }
@@ -3519,6 +3791,7 @@ function closeEditor(){
   pvBlobUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
   pvBlobUrls = [];
   $('editor').classList.remove('open');
+  refitPreview();                         // window may have been resized while we were away
   startRenderLoop();                      // recorder RAF back ON
 }
 
@@ -3555,7 +3828,6 @@ function syncClipUI(){
   $('ed-range').textContent = fmt2(clip.trimStart)+' – '+fmt2(clip.trimEnd)+'s';
   $('ed-move-l').disabled = pvIndex===0;
   $('ed-move-r').disabled = pvIndex===S.clips.length-1;
-  $('ed-delete').disabled = S.clips.length<=1 ? false : false;
   // trim handles + dim
   const full = clip.duration || 1;
   const lp = (clip.trimStart/full)*100, rp = (clip.trimEnd/full)*100;
@@ -3570,14 +3842,17 @@ function syncClipUI(){
 /* edit RAF: playhead, scrub, auto-advance through trims */
 function startEditLoop(){ if (S.editRAF) return; S.editRAF = requestAnimationFrame(editLoop); }
 function stopEditLoop(){ if (S.editRAF){ cancelAnimationFrame(S.editRAF); S.editRAF=0; } }
-let _edLast = { time:'', fill:-1 };
+let _edLast = { time:'', fill:-1, trim:-1 };
 function editLoop(){
   S.editRAF = requestAnimationFrame(editLoop);
   const clip = S.clips[pvIndex]; if (!clip) return;
-  // raw clips: re-composite the look onto the preview canvas (matches export)
+  // raw clips: re-composite the look onto the preview canvas (matches export).
+  // The preview only needs to be as big as it is on screen; compositing a full
+  // 4K frame every rAF to show a few hundred CSS pixels is the same waste the
+  // recorder preview avoids, so cap it the same way.
   if (clip.raw && pvVid.videoWidth){
-    const d = outputDims(S.res);
-    if (pvCv.width !== d.w || pvCv.height !== d.h){ pvCv.width = d.w; pvCv.height = d.h; }
+    const d = previewDims(edStage);
+    if (pvCv.width !== d.w || pvCv.height !== d.h){ pvCv.width = d.w; pvCv.height = d.h; hq(pvCtx); }
     pvCtx.fillStyle = '#000'; pvCtx.fillRect(0,0,d.w,d.h);
     compositeCam(pvCtx, pvVid, 0, 0, d.w, d.h, clip.look);
   }
@@ -3586,20 +3861,24 @@ function editLoop(){
     if (pvIndex < S.clips.length-1){ const wasPlaying=pvPlaying; loadClip(pvIndex+1, false); if(wasPlaying){ pvVid.play().catch(()=>{}); } }
     else { pvVid.pause(); pvPlaying=false; updatePlayIcon(); }
   }
-  // local trim playhead
+  // local trim playhead (skip the write when it hasn't moved a visible amount)
   const full = clip.duration || 1;
-  $('trim-play').style.left = (clip.trimStart>=0 ? (pvVid.currentTime/full)*100 : 0)+'%';
+  const trimPct = (pvVid.currentTime/full)*100;
+  if (Math.abs(trimPct - _edLast.trim) > 0.05){
+    EL.trimPlay.style.left = trimPct+'%';
+    _edLast.trim = trimPct;
+  }
   // global scrub + time (skip DOM write if unchanged)
   const localEff = clamp((pvVid.currentTime - clip.trimStart)/clip.speed, 0, effDur(clip));
   const globalT = (pvClipOffsets[pvIndex]||0) + localEff;
   const fillPct = pvTotal>0 ? (globalT/pvTotal*100) : 0;
   if (Math.abs(fillPct - _edLast.fill) > 0.1){
-    $('ed-scrub-fill').style.width = fillPct+'%';
-    $('ed-scrub-play').style.left = fillPct+'%';
+    EL.edFill.style.width = fillPct+'%';
+    EL.edPlayhead.style.left = fillPct+'%';
     _edLast.fill = fillPct;
   }
   const ts = fmt(globalT)+' / '+fmt(pvTotal);
-  if (ts !== _edLast.time){ $('ed-time').textContent = ts; _edLast.time = ts; }
+  if (ts !== _edLast.time){ EL.edTime.textContent = ts; _edLast.time = ts; }
 }
 
 function edPlayPause(){
@@ -3636,8 +3915,8 @@ function reconcileDuration(clip, realDur, i){
 async function computeWave(i){
   const clip = S.clips[i];
   if (!clip) return null;
-  const key = clip.id;                       // cache by stable id, NEVER by index
-  if (waveCache[key]) return waveCache[key];
+  const cached = waveCache.get(clip.blob);
+  if (cached) return cached;
   try {
     const buf = await clip.blob.arrayBuffer();
     const audio = await getDecodeCtx().decodeAudioData(buf.slice(0));
@@ -3659,10 +3938,7 @@ async function computeWave(i){
       env[p] = pk; if (pk>max) max=pk;
     }
     if (max>0) for (let p=0;p<N;p++) env[p] /= max;
-    // Only cache if the clip still exists — it may have been undone WHILE this
-    // decode was in flight (the rapid record→judge→undo loop). Caching here
-    // anyway would re-poison the slot and leak the array.
-    if (S.clips.some(c => c.id === key)) waveCache[key] = env;
+    waveCache.set(clip.blob, env);
     return env;
   } catch(e){ return null; }
 }
@@ -3693,29 +3969,44 @@ function drawWaveform(i){
 }
 
 /* ---- trim handle drag ---- */
-let trimDrag = null;
-function trimRect(){ return $('trim').getBoundingClientRect(); }
-function startTrim(which){ return e => { trimDrag = which; e.preventDefault(); }; }
-$('trim-l').addEventListener('pointerdown', startTrim('l'));
-$('trim-r').addEventListener('pointerdown', startTrim('r'));
-window.addEventListener('pointermove', e => {
-  if (!trimDrag) return;
-  const r = trimRect(); const clip = S.clips[pvIndex]; if (!clip) return;
+// The move/up listeners are bound only for the duration of a drag. A permanent
+// window-level pointermove fires for every mouse movement anywhere in the app —
+// including the whole time you're framing the shot on the canvas — just to read a
+// null and return.
+let trimDrag = null, trimBox = null;
+function startTrim(which){
+  return e => {
+    trimDrag = which;
+    trimBox = $('trim').getBoundingClientRect();   // measure once, not per move
+    e.preventDefault();
+    window.addEventListener('pointermove', onTrimMove);
+    window.addEventListener('pointerup', endTrim, { once:true });
+    window.addEventListener('pointercancel', endTrim, { once:true });
+  };
+}
+function onTrimMove(e){
+  const r = trimBox; const clip = S.clips[pvIndex]; if (!r || !clip) return;
   const t = clamp((e.clientX-r.left)/r.width, 0, 1) * clip.duration;
   if (trimDrag==='l') clip.trimStart = clamp(t, 0, clip.trimEnd-0.1);
   else clip.trimEnd = clamp(t, clip.trimStart+0.1, clip.duration);
   if (pvVid.currentTime < clip.trimStart) pvVid.currentTime = clip.trimStart;
   if (pvVid.currentTime > clip.trimEnd)   pvVid.currentTime = clip.trimEnd;
   syncClipUI();
-});
-window.addEventListener('pointerup', () => {
-  if (trimDrag){ trimDrag=null; rebuildOffsets(); rebuildScrubMarks(); drawWaveform(pvIndex); }
-});
+}
+function endTrim(){
+  window.removeEventListener('pointermove', onTrimMove);
+  if (!trimDrag) return;
+  trimDrag = null; trimBox = null;
+  rebuildOffsets(); rebuildScrubMarks(); drawWaveform(pvIndex);
+}
+$('trim-l').addEventListener('pointerdown', startTrim('l'));
+$('trim-r').addEventListener('pointerdown', startTrim('r'));
 
 /* click trim track to seek */
 $('trim').addEventListener('pointerdown', e => {
   if (e.target.classList.contains('trim-handle')) return;
-  const r = trimRect(); const clip = S.clips[pvIndex];
+  const clip = S.clips[pvIndex]; if (!clip) return;
+  const r = $('trim').getBoundingClientRect();
   const t = clamp((e.clientX-r.left)/r.width,0,1)*clip.duration;
   pvVid.currentTime = clamp(t, clip.trimStart, clip.trimEnd);
 });
@@ -3749,8 +4040,7 @@ function moveClip(dir){
 function deleteClip(){
   if (S.clips.length === 0) return;
   if (!confirm('Delete clip '+(pvIndex+1)+'? This cannot be undone.')) return;
-  const removed = S.clips.splice(pvIndex,1)[0];
-  if (removed) delete waveCache[removed.id];   // drop just the removed clip's wave
+  S.clips.splice(pvIndex,1);
   lastTimelineCount = -1; rebuildTimeline(); refreshClipDependentUI();
   if (S.clips.length === 0){ closeEditor(); return; }
   rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
@@ -3764,7 +4054,7 @@ function splitClip(){
   const a = { ...clip, id: nextClipId++, trimEnd: at };
   const b = { ...clip, id: nextClipId++, trimStart: at };
   S.clips.splice(pvIndex, 1, a, b);
-  delete waveCache[clip.id];               // parent gone; halves recompute under their own ids
+  // both halves share the parent blob → both hit the cached envelope immediately
   lastTimelineCount = -1; rebuildTimeline();
   rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
   loadClip(pvIndex, false);
@@ -3789,39 +4079,103 @@ function pickAvcCodec(w,h){
    editors and DaVinci Resolve actually accept — unlike MediaRecorder's
    fragmented, variable-frame-rate output. Falls back to the old MediaRecorder
    path automatically if WebCodecs or the muxer isn't present. */
-async function exportAll(){
+let cancelExport = false;
+
+/* One export run = a list of JOBS, each job = (clips → one file).
+   "Export all clips"        → 1 job holding every clip, stitched in order.
+   "Export clips separately" → 1 job per clip, numbered in timeline order.
+   Both paths share the same encoder, so trims / speed / look / resolution /
+   bitrate behave identically either way. */
+async function exportAll(separate){
   if (exporting) return;
   if (!S.clips.length){ toast('Record a clip first.'); return; }
   const haveWC = ('VideoEncoder' in window) && ('AudioEncoder' in window) &&
                  ('VideoFrame' in window) && ('AudioData' in window) &&
                  (typeof Mp4Muxer !== 'undefined');
-  if (!haveWC) return exportAllLegacy();
-  try { await exportWebCodecs(); }
-  catch(e){
-    console.error('Clean export failed, using fallback:', e);
-    toast('Clean MP4 path failed — used the fallback recorder instead.', true);
-    exporting = false;
-    return exportAllLegacy();
-  }
-}
 
-async function exportWebCodecs(){
   exporting = true;
+  cancelExport = false;
   const wasEditOpen = S.editOpen;
   stopRenderLoop();
-  showModal('Exporting', 'Preparing clean MP4…');
+
+  const stamp = Date.now();
+  const pad = n => String(n).padStart(2,'0');
+  const jobs = separate
+    ? S.clips.map((c,i) => ({ clips:[c], name:'meatcord-'+stamp+'-'+pad(i+1)+'.mp4' }))
+    : [{ clips: S.clips.slice(), name:'meatcord-'+stamp+'.mp4' }];
+
+  const multi = jobs.length > 1;
+  showModal(multi ? ('Exporting '+jobs.length+' clips') : 'Exporting',
+            multi ? 'Preparing file 1 of '+jobs.length+'…' : 'Preparing clean MP4…');
+  const cancelBtn = $('modal-cancel');
+  cancelBtn.textContent = 'Stop after this clip';
+  cancelBtn.disabled = false;
+  cancelBtn.style.display = multi ? '' : 'none';
+
+  let done = 0, fellBack = false, webmOnly = false, failed = null;
+  try {
+    for (let i=0; i<jobs.length; i++){
+      if (cancelExport) break;
+      const job = jobs[i];
+      const opts = {
+        prefix:   multi ? ('File '+(i+1)+' of '+jobs.length+' — ') : '',
+        progBase: i/jobs.length,
+        progSpan: 1/jobs.length,
+      };
+      let ok = false;
+      if (haveWC){
+        try { await exportWebCodecs(job.clips, job.name, opts); ok = true; }
+        catch(e){ console.error('Clean export failed, using fallback:', e); fellBack = true; }
+      }
+      if (!ok){
+        const out = await exportLegacyJob(job.clips, job.name, opts);
+        if (out && !out.mp4) webmOnly = true;
+      }
+      done++;
+      // Space the saves out a little: Chrome prompts once for "multiple
+      // downloads" and can drop files fired back-to-back.
+      if (i < jobs.length-1 && !cancelExport) await new Promise(r => setTimeout(r, 500));
+    }
+    setProgress(1);
+  } catch(e){
+    console.error(e); failed = e;
+  } finally {
+    hideModal();
+    cancelBtn.style.display = 'none';
+    exporting = false;
+    if (!wasEditOpen) startRenderLoop();
+  }
+
+  if (failed)           toast('Export failed: '+((failed && failed.message) || 'unknown error'), true);
+  else if (cancelExport) toast('Stopped — '+done+' of '+jobs.length+' file'+(jobs.length>1?'s':'')+' saved.', true);
+  else if (webmOnly)     toast('MP4 not supported by this browser — exported WebM instead. Update Chrome for MP4.', true);
+  else if (multi)        toast(done+' clips exported as separate MP4s — check your downloads.');
+  else if (fellBack)     toast('Clean MP4 path failed — used the fallback recorder instead.', true);
+  else                   toast('Export ready — clean MP4 (uploads & imports cleanly).');
+}
+
+/* Encodes ONE file from `clips` and saves it as `filename`.
+   opts: { prefix, progBase, progSpan } — lets a batch report overall progress.
+   Caller owns the modal, the `exporting` flag and the render loop. */
+async function exportWebCodecs(clips, filename, opts){
+  opts = opts || {};
+  const pfx    = opts.prefix || '';
+  const pBase  = opts.progBase || 0;
+  const pSpan  = opts.progSpan != null ? opts.progSpan : 1;
+  const setP   = f => setProgress(pBase + f*pSpan);
+  setP(0);
 
   let videoEncoder=null, audioEncoder=null, encErr=null;
   try {
-    const SR = 48000, FPS = TARGET_FPS;
+    const SR = 48000, FPS = S.expFps;
     const raw = outputDims(S.expRes);
     const dims = { w: even(raw.w), h: even(raw.h) };
-    exCanvas.width = dims.w; exCanvas.height = dims.h;
+    exCanvas.width = dims.w; exCanvas.height = dims.h; hq(exCtx);   // resize wipes ctx state
 
     // Plan the whole timeline in WHOLE FRAMES so audio and video share one exact
     // axis (this is what keeps them locked in sync — no VFR, no drift).
     const plan = []; let totalFrames = 0;
-    for (const clip of S.clips){
+    for (const clip of clips){
       const n = Math.max(1, Math.round(effDur(clip) * FPS));
       plan.push({ clip, startFrame: totalFrames, frames: n });
       totalFrames += n;
@@ -3866,13 +4220,20 @@ async function exportWebCodecs(){
 
     const onEncErr = e => { encErr = encErr || e; };
     videoEncoder = new VideoEncoder({ output:(c,m)=>{ try{ muxer.addVideoChunk(c,m); }catch(e){ onEncErr(e);} }, error:onEncErr });
-    videoEncoder.configure({ codec:vcodec, width:dims.w, height:dims.h, bitrate:vbr, framerate:FPS, hardwareAcceleration:hwAccel, avc:{ format:'avc' } });
+    // Both of these are the spec defaults, stated explicitly because they matter
+    // here and a hardware encoder path is exactly the kind of place a UA might
+    // pick otherwise: 'quality' lets the encoder use full lookahead instead of the
+    // low-delay mode a realtime capture would want (this is a file, we can afford
+    // the delay), and 'variable' spends bits where the motion is.
+    videoEncoder.configure({ codec:vcodec, width:dims.w, height:dims.h, bitrate:vbr, framerate:FPS,
+                             hardwareAcceleration:hwAccel, latencyMode:'quality',
+                             bitrateMode:'variable', avc:{ format:'avc' } });
     audioEncoder = new AudioEncoder({ output:(c,m)=>{ try{ muxer.addAudioChunk(c,m); }catch(e){ onEncErr(e);} }, error:onEncErr });
     audioEncoder.configure({ codec:acodec, sampleRate:SR, numberOfChannels:2, bitrate:192000 });
 
     // ----- AUDIO: render the entire timeline at once (trim + speed + concat +
     // resample to 48k) using OfflineAudioContext, then feed it to the encoder. -----
-    $('modal-sub').textContent = 'Mixing audio…';
+    $('modal-sub').textContent = pfx+'Mixing audio…';
     const offline = new OfflineAudioContext(2, Math.max(1, Math.ceil(totalDurSec*SR)), SR);
     for (const p of plan){
       let abuf=null;
@@ -3921,7 +4282,7 @@ async function exportWebCodecs(){
         frame.close();
       } catch(e){ encErr = encErr || e; }
     };
-    const tick = () => { if ((gf & 7)===0){ setProgress(gf/totalFrames); $('modal-sub').textContent = 'Encoding '+gf+' / '+totalFrames+' frames…'; } };
+    const tick = () => { if ((gf & 7)===0){ setP(gf/totalFrames); $('modal-sub').textContent = pfx+'Encoding '+gf+' / '+totalFrames+' frames…'; } };
 
     const renderClipPlay = (p) => new Promise(async (resolve, reject) => {
       const clip = p.clip, base = p.startFrame;
@@ -3952,7 +4313,12 @@ async function exportWebCodecs(){
         await new Promise((r,j)=>{ v.onloadeddata = r; v.addEventListener('error', ()=>j(new Error('clip load failed')), {once:true}); });
         // one seek per clip to the trim-in point
         await new Promise((r)=>{ const ok=()=>r(); v.addEventListener('seeked', ok, {once:true}); try{ v.currentTime = clip.trimStart; }catch(e){ ok(); } setTimeout(ok, 800); });
-        v.playbackRate = 2;   // smooth ceiling: a 60Hz display presents ~60 frames/sec, so 2x ⇒ 30 captured/sec = our grid
+        // A ~60Hz display presents at most ~60 frames/sec, and we need FPS grid
+        // frames per second of SOURCE time. At a 30fps grid we can safely run 2x
+        // (60 presented ⇒ 30 captured). At a 60fps grid, 2x would demand 120
+        // presented frames/sec — the browser would drop source frames and we'd
+        // silently bake 30fps motion into a 60fps file. So cap the rate.
+        v.playbackRate = FPS >= 60 ? 1 : 2;
         const onFrame = (now, meta) => {
           if (done) return;
           if (encErr) return fail(encErr);
@@ -4009,40 +4375,39 @@ async function exportWebCodecs(){
       }
     }
 
-    $('modal-sub').textContent = 'Finalizing…';
+    $('modal-sub').textContent = pfx+'Finalizing…';
     await videoEncoder.flush();
     await audioEncoder.flush();
     if (encErr) throw encErr;
     muxer.finalize();
 
     const blob = new Blob([muxer.target.buffer], { type:'video/mp4' });
-    downloadBlob(blob, 'meatcord-'+Date.now()+'.mp4');
-    setProgress(1);
-    toast('Export ready — clean MP4 (uploads & imports cleanly).');
+    downloadBlob(blob, filename);
+    setP(1);
   } finally {
     try { if (videoEncoder && videoEncoder.state!=='closed') videoEncoder.close(); } catch(e){}
     try { if (audioEncoder && audioEncoder.state!=='closed') audioEncoder.close(); } catch(e){}
-    hideModal();
-    exporting = false;
-    if (!wasEditOpen) startRenderLoop();
   }
 }
 
-async function exportAllLegacy(){
-  if (exporting) return;
-  if (!S.clips.length){ toast('Record a clip first.'); return; }
-  exporting = true;
-  const wasEditOpen = S.editOpen;
-  stopRenderLoop();                         // free CPU during export
+/* MediaRecorder fallback, same job shape as exportWebCodecs. Returns the format
+   it actually managed to write so the caller can warn about WebM. */
+async function exportLegacyJob(clips, filename, opts){
+  opts = opts || {};
+  const pfx   = opts.prefix || '';
+  const pBase = opts.progBase || 0;
+  const pSpan = opts.progSpan != null ? opts.progSpan : 1;
+  const setP  = f => setProgress(pBase + f*pSpan);
+  setP(0);
 
   const dims = outputDims(S.expRes);
-  exCanvas.width = dims.w; exCanvas.height = dims.h;
+  exCanvas.width = dims.w; exCanvas.height = dims.h; hq(exCtx);   // resize wipes ctx state
 
   ensureAudio();
   if (audioCtx.state==='suspended') await audioCtx.resume();
   const exDest = audioCtx.createMediaStreamDestination();
 
-  const cs = exCanvas.captureStream(TARGET_FPS);   // before MediaRecorder
+  const cs = exCanvas.captureStream(S.expFps);    // before MediaRecorder
   const stream = new MediaStream();
   cs.getVideoTracks().forEach(t => stream.addTrack(t));
   exDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
@@ -4063,23 +4428,23 @@ async function exportAllLegacy(){
     out = { mime: pickMime(), ext:'webm', mp4:false };
     recOpts.mimeType = out.mime;
     try { mr = new MediaRecorder(stream, recOpts); }
-    catch(e2){ toast('Export not supported here.', true); exporting=false; if(!wasEditOpen) startRenderLoop(); return; }
+    catch(e2){ throw new Error('Export not supported in this browser.'); }
   }
   const chunks = [];
   mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
   const finished = new Promise(res => mr.onstop = res);
 
-  showModal('Exporting', 'Stitching '+S.clips.length+' clip'+(S.clips.length>1?'s':'')+'…');
+  $('modal-sub').textContent = pfx+'Stitching '+clips.length+' clip'+(clips.length>1?'s':'')+'…';
   mr.start();
 
   const fmtTag = out.ext.toUpperCase()+' · '+S.expBitrate+' Mbps';
   try {
-    for (let i=0;i<S.clips.length;i++){
-      setProgress(i/S.clips.length);
-      $('modal-sub').textContent = 'Rendering clip '+(i+1)+' of '+S.clips.length+' · '+fmtTag+'…';
-      await exportClip(S.clips[i], exDest, dims);
+    for (let i=0;i<clips.length;i++){
+      setP(i/clips.length);
+      $('modal-sub').textContent = pfx+'Rendering clip '+(i+1)+' of '+clips.length+' · '+fmtTag+'…';
+      await exportClip(clips[i], exDest, dims);
     }
-    setProgress(1);
+    setP(1);
   } catch(e){ console.error(e); }
 
   mr.stop();
@@ -4087,13 +4452,8 @@ async function exportAllLegacy(){
   exDest.disconnect();
 
   const blob = new Blob(chunks, { type: out.mp4 ? 'video/mp4' : 'video/webm' });
-  downloadBlob(blob, 'meatcord-'+Date.now()+'.'+out.ext);
-  hideModal();
-  exporting = false;
-  if (!wasEditOpen) startRenderLoop();
-  toast(out.mp4
-    ? 'Export ready (MP4) — check your downloads.'
-    : 'MP4 not supported by this browser — exported WebM instead. Update Chrome for MP4.', !out.mp4);
+  downloadBlob(blob, filename.replace(/\.mp4$/, '.'+out.ext));
+  return out;
 }
 
 function exportClip(clip, exDest, dims){
@@ -4227,15 +4587,53 @@ function setMode(mode){
 
 function checkExportWarning(){
   const total = S.clips.reduce((a,c)=>a+effDur(c),0);
-  const big = (S.res==='4K' || S.expRes==='4K') && total > WARN_4K_SECONDS;
-  $('warn-pill').classList.toggle('show', big && !S.editOpen);
-  if (big) $('warn-pill').textContent = 'Long 4K timeline — 1080p is smoother for clips over 2 min.';
-  if (!S.clips.length){ $('export-note').textContent = ''; return; }
+
+  // Warning priority: wasted work first, then quality loss, then advice.
+  const camShort   = camVid.videoHeight || 0;
+  const outShort   = Math.min(outputDims(S.res).w, outputDims(S.res).h);
+  const camStarved = camShort > 0 && camShort < outShort * 0.9;
+  const camFps     = camTrackFps();
+  const fpsStarved = camFps > 0 && camFps < S.recFps * 0.9;
+  const fpsPadding = S.expFps > S.recFps;
+  const heavy      = S.res === '4K' && S.recFps >= 60;
+  const upscaling  = RES[S.expRes] > RES[S.res];
+  const big        = (S.res==='4K' || S.expRes==='4K') && total > WARN_4K_SECONDS;
+
+  let msg = '';
+  if (camStarved) msg = 'Camera only delivers '+camVid.videoWidth+'×'+camShort+' — recording at '+S.res+
+                        ' upscales it. All the CPU cost, none of the detail. Try '+
+                        (camShort >= 1080 ? '1080p' : '720p')+'.';
+  else if (fpsStarved) msg = 'Camera is only sending '+camFps+' fps — it can’t do '+S.recFps+
+                             ' at '+S.res+'. Drop Quality or set capture back to 30 fps.';
+  else if (heavy) msg = '4K at 60 fps doubles an already heavy load — expect dropped frames. '+
+                        '1440p or 30 fps will hold up better.';
+  else if (fpsPadding) msg = 'Exporting '+S.expFps+' fps from a '+S.recFps+' fps capture — frames get '+
+                             'duplicated, so it’s a bigger file with the same motion. Raise capture to '+
+                             S.expFps+' fps first.';
+  else if (upscaling) msg = 'Exporting '+S.expRes+' from a '+S.res+' capture — upscaled, not sharper. '+
+                            'Raise Quality or drop Export to '+S.res+'.';
+  else if (big) msg = 'Long 4K timeline — 1080p is smoother for clips over 2 min.';
+  $('warn-pill').classList.toggle('show', !!msg && !S.editOpen);
+  if (msg) $('warn-pill').textContent = msg;
+
+  const brNote = $('rec-note');
+  if (brNote){
+    const br = recordBitrateMbps();
+    brNote.textContent = S.res+' · '+S.recFps+' fps · '+br+' Mbps'+(S.recBitrate==='auto'?' (auto)':'')+
+      ' · ~'+Math.round(br/8)+' MB per 10s of take';
+  }
+
+  const n = S.clips.length;
+  const sepBtn = $('export-sep-btn');
+  sepBtn.disabled = !n;
+  sepBtn.textContent = n > 1 ? ('Export '+n+' clips separately') : 'Export clips separately';
+  if (!n){ $('export-note').textContent = ''; return; }
   // rough size estimate: (video + ~0.2 Mbps audio) × seconds ÷ 8
-  const mb = Math.round(((S.expBitrate + 0.2) * total) / 8);
-  const sizeStr = mb >= 1024 ? (mb/1024).toFixed(1)+' GB' : mb+' MB';
+  const size = s => { const mb = Math.round(((S.expBitrate + 0.2) * s) / 8);
+                      return mb >= 1024 ? (mb/1024).toFixed(1)+' GB' : mb+' MB'; };
   $('export-note').textContent =
-    S.clips.length+' clips · '+fmt(total)+' · '+S.expRes+' · '+S.expBitrate+' Mbps · ~'+sizeStr;
+    n+' clips · '+fmt(total)+' · '+S.expRes+' · '+S.expFps+' fps · '+S.expBitrate+' Mbps · ~'+size(total)+' stitched'+
+    (n > 1 ? ' · ~'+size(total/n)+' avg per file' : '');
 }
 
 /* ============================================================
@@ -4248,32 +4646,18 @@ $('ar-seg').addEventListener('click', e => { const b=e.target.closest('button');
   S.ar=b.dataset.ar; [...$('ar-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); });
 $('res-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   if (S.recording){ toast('Stop recording before changing quality.'); return; }
-  S.res=b.dataset.res; [...$('res-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); startCamera(); checkExportWarning(); });
+  S.res=b.dataset.res; [...$('res-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); startCamera();
+  // Otherwise raising Quality here has no effect on what you actually get out:
+  // export renders from S.expRes, independent of capture, so a forgotten Export
+  // chip would silently hold the file at its old size.
+  if (S.expResFollowsCapture && S.expRes !== S.res){ setExpRes(S.res); toast('Export resolution matched to '+S.res+'.'); }
+  checkExportWarning(); });
 
 // camera controls
 $('fit-cover').addEventListener('click', () => { S.fit='cover'; $('fit-cover').classList.add('on'); $('fit-contain').classList.remove('on'); });
 $('fit-contain').addEventListener('click', () => { S.fit='contain'; $('fit-contain').classList.add('on'); $('fit-cover').classList.remove('on'); });
 $('mirror-btn').addEventListener('click', () => { S.mirror=!S.mirror; $('mirror-btn').classList.toggle('on', S.mirror); });
 $('zoom').addEventListener('input', e => { S.camScale=e.target.value/100; $('zoom-val').textContent=S.camScale.toFixed(2)+'×'; });
-
-// NOTE camScale lives on drawCam via opt.scale → pass it in mode draws:
-//  override draw functions to include zoom
-// (re-bind by wrapping: simplest is to read S.camScale inside drawCam calls)
-// We patch the mode draws to pass scale:
-draw_normal = function(){ drawCam(0,0,canvasDims.w,canvasDims.h,{ panX:S.camPanX, panY:S.camPanY, scale:S.camScale }); };
-draw_split = function(){
-  const {w,h}=canvasDims; const divY=Math.round(h*S.splitDivider);
-  drawMedia(0,0,w,divY,S.splitTopPanX,S.splitTopPanY);
-  drawCam(0,divY,w,h-divY,{ panX:S.splitBotPanX, panY:S.splitBotPanY, scale:S.camScale });
-  ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fillRect(0,divY-1,w,2);
-};
-draw_pip = function(){
-  const {w,h}=canvasDims; drawMedia(0,0,w,h,0,0);
-  const box=pipBox();
-  ctx.save(); ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=18; ctx.shadowOffsetY=6;
-  ctx.fillStyle='#000'; roundRectPath(ctx,box.x,box.y,box.w,box.h,box.r); ctx.fill(); ctx.restore();
-  drawCam(box.x,box.y,box.w,box.h,{ panX:S.camPanX, panY:S.camPanY, scale:S.camScale, radius:box.r });
-};
 
 // filters
 $('filters').addEventListener('input', e => {
@@ -4329,11 +4713,42 @@ $('scrub').addEventListener('pointerdown', e => {
 });
 
 // export
+// Small setters (not just event handlers) so the capture-side controls above
+// can drive these chips too, when export is following capture.
+function setExpRes(res){
+  S.expRes = res;
+  [...$('exp-res').children].forEach(x=>x.classList.toggle('on', x.dataset.eres===res));
+}
+function setExpFps(fps){
+  S.expFps = fps;
+  [...$('exp-fps').children].forEach(x=>x.classList.toggle('on', +x.dataset.efps===fps));
+}
 $('exp-res').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
-  S.expRes=b.dataset.eres; [...$('exp-res').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
+  S.expResFollowsCapture = false;    // user is now choosing export size deliberately
+  setExpRes(b.dataset.eres); checkExportWarning(); });
 $('exp-bitrate').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   S.expBitrate=+b.dataset.ebr; [...$('exp-bitrate').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
-$('export-btn').addEventListener('click', exportAll);
+$('rec-fps').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  if (S.recording){ toast('Stop recording before changing frame rate.'); return; }
+  S.recFps = +b.dataset.rfps;
+  [...$('rec-fps').children].forEach(x=>x.classList.toggle('on',x===b));
+  startCamera();                     // re-request the camera at the new rate
+  if (S.expFpsFollowsCapture && S.expFps !== S.recFps){ setExpFps(S.recFps); toast('Export frame rate matched to '+S.recFps+' fps.'); }
+  checkExportWarning(); });
+$('exp-fps').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  S.expFpsFollowsCapture = false;    // user is now choosing export fps deliberately
+  setExpFps(+b.dataset.efps); checkExportWarning(); });
+$('rec-bitrate').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
+  if (S.recording){ toast('Stop recording before changing capture bitrate.'); return; }
+  S.recBitrate = b.dataset.rbr==='auto' ? 'auto' : +b.dataset.rbr;
+  [...$('rec-bitrate').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
+$('export-btn').addEventListener('click', () => exportAll(false));
+$('export-sep-btn').addEventListener('click', () => exportAll(true));
+$('modal-cancel').addEventListener('click', () => {
+  cancelExport = true;
+  $('modal-cancel').textContent = 'Stopping after this clip…';
+  $('modal-cancel').disabled = true;
+});
 
 // panels collapse
 document.querySelectorAll('[data-panel] .panel-h').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed')));
@@ -4383,12 +4798,6 @@ window.addEventListener('keydown', e => {
   else if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undoClip(); }
 });
 
-// keep export warning fresh
-const _origAddClip = addClip;
-// (checkExportWarning called from refreshClipDependentUI path)
-const _origRefresh = refreshClipDependentUI;
-refreshClipDependentUI = function(){ _origRefresh(); checkExportWarning(); };
-
 /* ============================================================
    BOOT
    ============================================================ */
@@ -4396,6 +4805,7 @@ applyOutputDims();
 rebuildFilters();
 updateImpPlayBtn();
 setMode(MODES.NORMAL);
+checkExportWarning();
 startRenderLoop();
 startCamera();
 
