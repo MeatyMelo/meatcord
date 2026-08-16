@@ -42,7 +42,13 @@
   input,select{font-family:inherit}
 
   /* ---- App shell: topbar / main / controls / timeline ---- */
-  .app{display:grid; grid-template-rows:auto 1fr auto; height:100vh; height:100dvh}
+  /* grid-template-COLUMNS matters as much as the rows here: without it the single
+     implicit column is auto-sized, so it grows to fit its widest child. A long
+     timeline then widened the column and dragged the topbar, stage and controls
+     off screen with it. minmax(0,1fr) pins the column to the viewport and lets
+     the timeline scroll inside its own box instead. */
+  .app{display:grid; grid-template-rows:auto 1fr auto; grid-template-columns:minmax(0,1fr);
+       height:100vh; height:100dvh; overflow:hidden}
 
   /* ---- COMPACT SHELL: icon rail + flyout panels -------------------------
      The panels keep their original markup and ids; only where they live
@@ -84,6 +90,7 @@
   .footer{
     display:flex; align-items:center; gap:12px; background:var(--surface);
     border-top:1px solid var(--line); padding:0 14px; min-height:60px;
+    min-width:0;                      /* grid items default to min-width:auto */
   }
   .footer .controls{border-top:0; padding:8px 0; gap:12px; flex:none}
   .footer .timer{position:static; left:auto}
@@ -104,7 +111,7 @@
   }
 
   .topbar{
-    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap; min-width:0;
     padding:7px 14px; background:var(--surface);
     border-bottom:1px solid var(--line);
   }
@@ -127,7 +134,7 @@
   .seg button.on{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
 
   /* ---- Main: stage + side panel ---- */
-  .main{display:flex; min-height:0; overflow:hidden; position:relative}
+  .main{display:flex; min-height:0; min-width:0; overflow:hidden; position:relative}
   .stage{
     flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(circle at 50% 35%, #161619 0%, #0a0a0c 75%);
