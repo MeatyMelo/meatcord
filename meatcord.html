@@ -42,11 +42,70 @@
   input,select{font-family:inherit}
 
   /* ---- App shell: topbar / main / controls / timeline ---- */
-  .app{display:grid; grid-template-rows:auto 1fr auto auto; height:100vh; height:100dvh}
+  .app{display:grid; grid-template-rows:auto 1fr auto; height:100vh; height:100dvh}
+
+  /* ---- COMPACT SHELL: icon rail + flyout panels -------------------------
+     The panels keep their original markup and ids; only where they live
+     changes. One is visible at a time, floating over the stage, so the
+     preview keeps the full width whenever no panel is open. */
+  .rail{
+    width:52px; flex:none; background:var(--surface); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; gap:6px; padding:9px 0; z-index:12;
+  }
+  .rail-gap{flex:1}
+  .rail-btn{
+    width:34px; height:34px; border-radius:9px; background:var(--surface-2);
+    border:1px solid var(--line); color:var(--text-dim); cursor:pointer;
+    font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center;
+    transition:background .12s,color .12s,border-color .12s; flex:none;
+  }
+  .rail-btn:hover{background:var(--surface-3); color:var(--text)}
+  .rail-btn.on{background:rgba(196,30,42,.18); border-color:var(--rec-deep); color:#fff}
+  .rail-btn[hidden]{display:none}
+
+  /* the flyout: the old .side, now floating and showing one panel */
+  .side.flyout{
+    /* offset by the rail's own width — .main is the positioning context and it
+       includes the rail, so right:10px would slide the panel underneath it */
+    position:absolute; top:10px; right:62px; bottom:10px; width:288px;
+    border:1px solid var(--line); border-radius:12px; border-left:1px solid var(--line);
+    box-shadow:0 18px 55px rgba(0,0,0,.66); z-index:11; display:none;
+  }
+  .side.flyout.open{display:block}
+  .side.flyout .panel{display:none; border-bottom:0}
+  .side.flyout .panel.active{display:block}
+  /* in flyout mode the panel is the whole surface, so it is never collapsed —
+     which also makes the collapse chevron meaningless, so it goes */
+  .side.flyout .panel.active .panel-body{display:block}
+  .side.flyout .panel-h{cursor:default; pointer-events:none}
+  .side.flyout .chev{display:none}
+
+  /* footer: transport and timeline share one row */
+  .footer{
+    display:flex; align-items:center; gap:12px; background:var(--surface);
+    border-top:1px solid var(--line); padding:0 14px; min-height:60px;
+  }
+  .footer .controls{border-top:0; padding:8px 0; gap:12px; flex:none}
+  .footer .timer{position:static; left:auto}
+  .footer .edit-launch{position:static; right:auto}
+  .footer .timeline{
+    flex:1; min-width:0; border-top:0; background:transparent; padding:8px 0 8px 4px;
+  }
+
+  /* drop-anywhere target over the preview */
+  .canvas-drop{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(10,10,12,.72); z-index:20; pointer-events:none;
+  }
+  .canvas-drop.show{display:flex}
+  .canvas-drop div{
+    border:2px dashed var(--rec); color:#fff; background:rgba(196,30,42,.16);
+    padding:16px 26px; border-radius:12px; font-size:14px; letter-spacing:.3px;
+  }
 
   .topbar{
     display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-    padding:10px 14px; background:var(--surface);
+    padding:7px 14px; background:var(--surface);
     border-bottom:1px solid var(--line);
   }
   .brand{
@@ -68,7 +127,7 @@
   .seg button.on{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
 
   /* ---- Main: stage + side panel ---- */
-  .main{display:flex; min-height:0; overflow:hidden}
+  .main{display:flex; min-height:0; overflow:hidden; position:relative}
   .stage{
     flex:1; min-width:0; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(circle at 50% 35%, #161619 0%, #0a0a0c 75%);
@@ -171,6 +230,45 @@
   .drop:hover,.drop.over{border-color:var(--rec-deep);color:var(--text-dim)}
 
   .media-info{font-size:11.5px;color:var(--text-faint);margin-top:8px;font-family:var(--mono);word-break:break-all}
+
+  /* ---- Drafts ---- */
+  .draft-row{
+    display:flex;align-items:center;gap:8px;padding:8px 9px;margin-bottom:5px;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:7px;cursor:pointer;
+  }
+  .draft-row:hover{background:var(--surface-3)}
+  .draft-row.on{border-color:var(--rec-deep);background:rgba(196,30,42,.14)}
+  .draft-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .draft-main b{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .draft-main span{font-size:10.5px;color:var(--text-faint);font-family:var(--mono)}
+  .draft-x{
+    background:transparent;border:0;color:var(--text-faint);cursor:pointer;font-size:13px;
+    padding:3px 5px;border-radius:5px;flex:none;
+  }
+  .draft-x:hover{background:var(--rec-deep);color:#fff}
+  .rail-btn{position:relative}
+  .rail-dot{
+    position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;
+    background:var(--ok);box-shadow:0 0 5px rgba(61,220,132,.6);
+  }
+
+  /* ---- OBS bridge panel ---- */
+  .txt{
+    width:100%;padding:7px 9px;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:var(--radius-sm);color:var(--text);font-size:12px;font-family:var(--mono);
+  }
+  .txt:focus{outline:none;border-color:var(--text-faint)}
+  .obs-state{display:inline-flex;align-items:center;gap:5px}
+  .obs-dot{width:7px;height:7px;border-radius:50%;background:var(--text-faint);flex:none}
+  .obs-dot.on{background:var(--ok);box-shadow:0 0 6px rgba(61,220,132,.5)}
+  .obs-dot.busy{background:var(--warn)}
+  .obs-dot.err{background:var(--rec)}
+  .obs-map{display:grid;grid-template-columns:58px 1fr;align-items:center;gap:6px;margin-bottom:5px}
+  .obs-map span{font-size:11.5px;color:var(--text-faint)}
+  .obs-map select{
+    width:100%;padding:5px 7px;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:6px;color:var(--text);font-size:12px;
+  }
 
   .scrub{position:relative;height:34px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;margin-top:8px;cursor:pointer;overflow:hidden}
   .scrub-film{position:absolute;inset:0;display:flex}
@@ -313,9 +411,10 @@
     *{transition:none !important}
   }
   @media (max-width:760px){
-    .main{flex-direction:column}
-    .side{width:100%;max-height:42vh;border-left:0;border-top:1px solid var(--line)}
+    .side.flyout{left:10px; right:62px; width:auto; top:auto; height:52vh}
     .topbar{gap:8px}
+    .footer{flex-wrap:wrap; min-height:0; padding-bottom:6px}
+    .footer .timeline{flex-basis:100%}
   }
 </style>
 </head>
@@ -371,18 +470,97 @@
   <div class="main">
     <div class="stage" id="stage">
       <canvas class="stage-canvas" id="canvas"></canvas>
-      <div class="stage-empty" id="stage-empty">Allow camera access to begin. Import media for Split &amp; PiP modes.</div>
+      <div class="stage-empty" id="stage-empty">Allow camera access to begin. Drop an image or video here for Split &amp; PiP.</div>
       <div class="rec-hud" id="rec-hud"><span class="blink"></span><span id="rec-hud-time">0:00</span><span class="hud-fps" id="rec-hud-fps"></span></div>
       <div class="warn-pill" id="warn-pill"></div>
       <div class="warn-pill perf-pill" id="perf-pill"></div>
+      <div class="canvas-drop" id="canvas-drop"><div>Drop to use as background</div></div>
     </div>
+
+    <nav class="rail" id="rail" aria-label="Panels">
+      <button class="rail-btn" data-panel-btn="camera"   title="Camera">◉</button>
+      <button class="rail-btn" data-panel-btn="recording" title="Recording">⏺</button>
+      <button class="rail-btn" data-panel-btn="media"    title="Import media">⬚</button>
+      <button class="rail-btn" data-panel-btn="pip"      title="PiP layout">⬓</button>
+      <button class="rail-btn" data-panel-btn="filters"  title="Filters">◑</button>
+      <button class="rail-btn" data-panel-btn="audio"    title="Audio">♪</button>
+      <button class="rail-btn" data-panel-btn="drafts" title="Drafts">▤<span class="rail-dot" id="rail-draft-dot" style="display:none"></span></button>
+      <span class="rail-gap"></span>
+      <button class="rail-btn" data-panel-btn="obs"      title="OBS camera">⧉</button>
+      <button class="rail-btn" data-panel-btn="export"   title="Export">⤓</button>
+    </nav>
 
     <!-- SIDE PANEL -->
     <aside class="side" id="side">
 
-      <section class="panel" data-panel>
+      <section class="panel" data-panel data-rail="drafts">
+        <button class="panel-h">Drafts <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field">
+            <label>Current <span class="val" id="draft-usage"></span></label>
+            <input type="text" class="txt" id="draft-name-input" placeholder="Untitled draft">
+            <div class="media-info" id="draft-name" style="margin-top:6px"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="draft-new">New draft</button>
+            <button class="btn" id="draft-save">Save now</button>
+          </div>
+          <div class="field">
+            <label>Project folder <span class="val" id="fs-state">not linked</span></label>
+            <button class="btn" id="draft-folder">Choose folder…</button>
+          </div>
+          <div class="field">
+            <label>Saved drafts</label>
+            <div id="draft-list"></div>
+          </div>
+          <div class="field" style="color:var(--text-faint);font-size:11.5px">
+            <b id="fs-brave-note" style="display:none;color:var(--warn)">Brave hides the folder picker by
+            default — enable <span style="font-family:var(--mono)">brave://flags/#file-system-access-api</span>
+            and relaunch.</b>
+            Link a project folder and each draft becomes a real directory you can open in
+            Explorer — <span class="note" style="font-family:var(--mono)">project.json</span> plus the
+            takes as video files. Without one, drafts still work but live inside the browser,
+            where clearing site data removes them.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel data-rail="obs" id="obs-panel">
+        <button class="panel-h">OBS camera <span class="chev">▾</span></button>
+        <div class="panel-body">
+          <div class="field" style="color:var(--text-faint);font-size:11.5px;margin-top:6px">
+            OBS feeds the <b>camera image</b> through its Virtual Camera — its filters, colour
+            and multi-source scenes arrive as an ordinary webcam. Recording, backgrounds,
+            Split/PiP and undo all stay in Meatcord.
+          </div>
+          <div class="field">
+            <label>Server
+              <span class="val obs-state"><span class="obs-dot" id="obs-dot"></span><span id="obs-status">offline</span></span>
+            </label>
+            <input type="text" class="txt" id="obs-url" value="ws://127.0.0.1:4455" spellcheck="false">
+          </div>
+          <div class="field">
+            <label>Password <span class="val">Tools → WebSocket Server Settings</span></label>
+            <input type="password" class="txt" id="obs-pass" placeholder="blank if auth is off" autocomplete="off">
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="obs-connect">Connect</button>
+            <button class="btn" id="obs-disconnect" disabled>Disconnect</button>
+          </div>
+          <div class="field">
+            <label>Scene <span class="val">changes the camera look</span></label>
+            <div id="obs-scenes"><div class="media-info" style="margin:0">Connect to list scenes.</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel data-rail="camera">
         <button class="panel-h">Camera <span class="chev">▾</span></button>
         <div class="panel-body">
+          <div class="field">
+            <label>Video source <span class="val" id="cam-device-note"></span></label>
+            <select id="cam-device" class="txt"></select>
+          </div>
           <div class="field">
             <div class="btn-row">
               <button class="btn" id="fit-cover">Fill</button>
@@ -398,7 +576,7 @@
         </div>
       </section>
 
-      <section class="panel" data-panel>
+      <section class="panel" data-panel data-rail="recording">
         <button class="panel-h">Recording <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="field">
@@ -424,12 +602,19 @@
         </div>
       </section>
 
-      <section class="panel" data-panel>
+      <section class="panel" data-panel data-rail="media">
         <button class="panel-h">Import media <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="drop" id="drop">Drop image or video<br>or click to choose</div>
           <input type="file" id="file" accept="image/*,video/*" hidden>
           <div class="media-info" id="media-info"></div>
+          <div class="field">
+            <label>Framing <span class="val" id="mediafit-val">crops to fill</span></label>
+            <div class="btn-row">
+              <button class="btn on" id="mediafit-fill">Fill</button>
+              <button class="btn" id="mediafit-fit">Fit + blur</button>
+            </div>
+          </div>
           <div id="video-tools" style="display:none">
             <div class="scrub" id="scrub">
               <div class="scrub-film" id="scrub-film"></div>
@@ -447,7 +632,7 @@
         </div>
       </section>
 
-      <section class="panel collapsed" data-panel id="pip-panel" style="display:none">
+      <section class="panel" data-panel data-rail="pip" id="pip-panel">
         <button class="panel-h">PiP layout <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="field">
@@ -481,7 +666,7 @@
         </div>
       </section>
 
-      <section class="panel collapsed" data-panel>
+      <section class="panel" data-panel data-rail="filters">
         <button class="panel-h">Filters <span class="chev">▾</span></button>
         <div class="panel-body" id="filters">
           <div class="field"><label>Brightness <span class="val" data-fval="brightness">0</span></label><input type="range" data-filter="brightness" min="50" max="150" value="100"></div>
@@ -496,17 +681,21 @@
         </div>
       </section>
 
-      <section class="panel" data-panel>
+      <section class="panel" data-panel data-rail="audio">
         <button class="panel-h">Audio <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="field">
-            <label>Microphone <span class="val" id="micvol-val">100%</span></label>
+            <label>Input device <span class="val" id="mic-device-note"></span></label>
+            <select id="mic-device" class="txt"></select>
+          </div>
+          <div class="field">
+            <label>Level <span class="val" id="micvol-val">100%</span></label>
             <input type="range" id="micvol" min="0" max="150" value="100" title="Affects Split/PiP recordings. Normal mode records the camera mic directly for perfect A/V sync — set its level in post.">
           </div>
         </div>
       </section>
 
-      <section class="panel" data-panel>
+      <section class="panel" data-panel data-rail="export">
         <button class="panel-h">Export <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="field">
@@ -543,7 +732,8 @@
     </aside>
   </div>
 
-  <!-- CONTROLS -->
+  <!-- FOOTER: transport + timeline on one row -->
+  <div class="footer">
   <div class="controls">
     <div class="timer mono" id="timer">0:00</div>
     <button class="ctrl-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled aria-label="Undo last clip">
@@ -561,6 +751,7 @@
 
   <!-- TIMELINE -->
   <div class="timeline" id="timeline"><span class="tl-empty">No clips yet — hit record.</span></div>
+  </div>
 </div>
 
 <!-- ============ EDITOR OVERLAY ============ -->
@@ -2633,6 +2824,8 @@ const S = {
   pip: { x:0.05, y:0.05, w:0.30, ar:'auto', radius:0.12 },
 
   hasMedia:false, mediaKind:null,    // 'image' | 'video'
+  mediaFit:'fill',                   // 'fill' = cover-crop (original behaviour)
+                                     // 'fit'  = whole frame + blurred backdrop
   importPlaying:false,
   micEnabled:true,
   micVol:1, importVol:1,
@@ -2641,8 +2834,18 @@ const S = {
   recStart:0,
 
   clips:[],
+  draftId:'', draftName:'', draftFolder:'', draftMediaFile:'',   // session being persisted
   editOpen:false,
   recRAF:0, editRAF:0,
+
+  /* Capture devices. '' = system default. Set the video one to the OBS Virtual
+     Camera to get OBS's compositing and filters as an ordinary camera track, with
+     every Meatcord behaviour below unchanged.
+     Both are requested in a SINGLE getUserMedia call, which is deliberate: Normal
+     mode records those two tracks together and relies on them sharing one capture
+     clock. */
+  camDeviceId:'',
+  micDeviceId:'',
 };
 
 /* ============================================================
@@ -2661,8 +2864,16 @@ const stage    = $('stage');
    downscale and a properly filtered one, and every path here downscales
    (camera → preview, clip → export). It costs nothing on a draw that isn't
    scaling down. */
-function hq(c){ c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; return c; }
-const ctx      = hq(canvas.getContext('2d', { alpha:false }));
+function hq(c, q){ c.imageSmoothingEnabled = true; c.imageSmoothingQuality = q || 'high'; return c; }
+/* Measured on a GPU-accelerated canvas, 'high' costs 0.007ms per full-resolution
+   draw — indistinguishable from 'low'. Skia does this on the GPU, so the filter
+   choice is free and there is no reason for the live canvas (which IS the recorded
+   surface in Split/PiP) to record at lower resampling quality than export.
+   It was briefly set to 'medium' while chasing dropped frames on a machine running
+   without hardware acceleration; that turned out to be the wrong lever — with the
+   GPU disabled BOTH settings cost ~8.7ms, so nothing was gained by degrading it. */
+const LIVE_SMOOTHING = 'high';
+const ctx      = hq(canvas.getContext('2d', { alpha:false }), LIVE_SMOOTHING);
 const exCtx    = hq(exCanvas.getContext('2d', { alpha:false }));
 const workCtx  = hq(workCv.getContext('2d'));
 
@@ -2698,10 +2909,16 @@ async function startCamera(){
     // 9:16 before it reached the canvas. We ask for a landscape frame at the
     // chosen quality (short side = V) and let the webcam deliver its own
     // native aspect ratio; the canvas then frames the full picture.
+    const videoCon = { width:{ ideal: Math.round(V*16/9) }, height:{ ideal: V },
+                       frameRate:{ ideal: S.recFps } };
+    // 'exact' so a stale/unplugged device fails loudly instead of silently
+    // handing back a different camera mid-session.
+    if (S.camDeviceId) videoCon.deviceId = { exact: S.camDeviceId };
+    const audioCon = { echoCancellation:true, noiseSuppression:true };
+    if (S.micDeviceId) audioCon.deviceId = { exact: S.micDeviceId };
     micStream = await navigator.mediaDevices.getUserMedia({
-      video: { width:{ ideal: Math.round(V*16/9) }, height:{ ideal: V },
-               frameRate:{ ideal: S.recFps } },
-      audio: { echoCancellation:true, noiseSuppression:true }
+      video: videoCon,
+      audio: audioCon
     });
     camVid.srcObject = micStream;
     await camVid.play().catch(()=>{});
@@ -2710,9 +2927,11 @@ async function startCamera(){
     if (at) at.enabled = S.micEnabled;
     S.camReady = true;
     $('stage-empty').style.display = 'none';
+    refreshDevices();         // labels are blank until permission lands — re-read now
     // reconnect mic into audio graph if it already exists
     reconnectMic();
     pumpCamFrames();          // (re)arm the new-frame signal on this track
+    probeHwEncoder();         // Normal mode targets the camera's size, which just changed
     updateActualRes();
   } catch (err) {
     toast('Camera/mic blocked. Grant permission and reload. Needs https or localhost.', true);
@@ -2782,7 +3001,7 @@ function setCanvasDims(dims){
   canvasDims = dims;
   canvas.width = dims.w;
   canvas.height = dims.h;
-  hq(ctx);                     // the resize just wiped the context state
+  hq(ctx, LIVE_SMOOTHING);     // the resize just wiped the context state
   invalidateRect();
 }
 
@@ -2852,6 +3071,11 @@ function rebuildFilters(){
    No geometry caching: recomputed each call (cheap, bug-proof).
    ============================================================ */
 function drawCam(dx, dy, dw, dh, opt){
+  const _t0 = performance.now();
+  try { drawCamInner(dx, dy, dw, dh, opt); }
+  finally { PROF.cam += performance.now() - _t0; }
+}
+function drawCamInner(dx, dy, dw, dh, opt){
   const sw = camVid.videoWidth, sh = camVid.videoHeight;
   if (!sw || !sh) return;
   const fit    = opt.fit    || S.fit;
@@ -3067,11 +3291,32 @@ function drawSnapGuides(){
 
 /* draw imported media (image static / video frame) covering a region */
 function drawMedia(dx, dy, dw, dh, panX, panY){
+  const _t0 = performance.now();
+  try { drawMediaInner(dx, dy, dw, dh, panX, panY); }
+  finally { PROF.media += performance.now() - _t0; }
+}
+function drawMediaInner(dx, dy, dw, dh, panX, panY){
   if (!S.hasMedia) { ctx.fillStyle = '#0e0e10'; ctx.fillRect(dx,dy,dw,dh); return; }
   let src, sw, sh;
   if (S.mediaKind === 'image'){ src = importImg; sw = importImg.naturalWidth; sh = importImg.naturalHeight; }
   else { src = importVid; sw = importVid.videoWidth; sh = importVid.videoHeight; }
   if (!sw || !sh){ ctx.fillStyle = '#0e0e10'; ctx.fillRect(dx,dy,dw,dh); return; }
+
+  if (S.mediaFit === 'fit'){
+    drawBlurBackdrop(src, sw, sh, dx, dy, dw, dh);
+    // Whole frame, never cropped. One axis meets the region exactly and the other
+    // leaves slack — pan slides the picture through that slack, so dragging still
+    // does something meaningful instead of going dead in this mode.
+    const s2 = Math.min(dw/sw, dh/sh);
+    const drawW = sw*s2, drawH = sh*s2;
+    const slackX = dw - drawW, slackY = dh - drawH;
+    const x = dx + slackX/2 + (panX||0) * slackX/2;
+    const y = dy + slackY/2 + (panY||0) * slackY/2;
+    ctx.drawImage(src, x, y, drawW, drawH);
+    return;
+  }
+
+  // 'fill' — cover-crop: fills the region, trims whatever overflows
   const srcScale = Math.max(dw/sw, dh/sh);
   const cropW = dw/srcScale, cropH = dh/srcScale;
   let cropX = (sw-cropW)/2 * (1 + (panX||0));
@@ -3079,6 +3324,37 @@ function drawMedia(dx, dy, dw, dh, panX, panY){
   cropX = clamp(cropX, 0, sw-cropW);
   cropY = clamp(cropY, 0, sh-cropH);
   ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
+}
+
+/* Blurred backdrop behind a fitted frame, so the letterbox gaps read as an
+   extension of the shot instead of black bars.
+
+   The blur is done by DOWNSCALING to a tiny canvas and letting the upscale back
+   out do the smoothing. A ctx.filter blur works in destination space, so blurring
+   straight onto a 1080x1920 region costs real milliseconds every frame; blurring
+   a ~96px canvas costs nothing and the stretch hides the difference. */
+let blurCv = null, blurCtx = null;
+const BLUR_SHORT = 96;
+function drawBlurBackdrop(src, sw, sh, dx, dy, dw, dh){
+  const ar = dw / dh;
+  const tw = Math.max(16, Math.round(ar >= 1 ? BLUR_SHORT * ar : BLUR_SHORT));
+  const th = Math.max(16, Math.round(ar >= 1 ? BLUR_SHORT : BLUR_SHORT / ar));
+  if (!blurCv) blurCv = document.createElement('canvas');
+  if (blurCv.width !== tw || blurCv.height !== th){
+    blurCv.width = tw; blurCv.height = th;
+    blurCtx = hq(blurCv.getContext('2d', { alpha:false }));
+  }
+  // cover-crop the source into the tiny canvas, softening as it goes
+  const s2 = Math.max(tw/sw, th/sh);
+  const cw = tw/s2, ch = th/s2;
+  blurCtx.filter = 'blur(2px)';
+  blurCtx.drawImage(src, (sw-cw)/2, (sh-ch)/2, cw, ch, 0, 0, tw, th);
+  blurCtx.filter = 'none';
+
+  ctx.drawImage(blurCv, dx, dy, dw, dh);          // the stretch IS the blur
+  // knock it back so the foreground frame stays the thing you look at
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  ctx.fillRect(dx, dy, dw, dh);
 }
 
 /* ============================================================
@@ -3096,16 +3372,33 @@ function draw_split(){
   ctx.fillStyle = 'rgba(255,255,255,.18)';
   ctx.fillRect(0, divY-1, w, 2);
 }
+/* The PiP drop shadow is a gaussian blur, and it was being recomputed on every
+   single frame even though it only changes when the box is resized. Render it
+   once per geometry into an offscreen canvas and blit it instead — the blur cost
+   goes from 30x/sec to once per drag. */
+let pipShadowCv = null, pipShadowKey = '';
+const PIP_SHADOW_PAD = 40;                     // room for blur radius + offset
+function drawPipShadow(box){
+  const key = Math.round(box.w)+'x'+Math.round(box.h)+'r'+Math.round(box.r);
+  if (pipShadowKey !== key){
+    pipShadowKey = key;
+    pipShadowCv = pipShadowCv || document.createElement('canvas');
+    pipShadowCv.width  = Math.ceil(box.w) + PIP_SHADOW_PAD*2;
+    pipShadowCv.height = Math.ceil(box.h) + PIP_SHADOW_PAD*2;
+    const g = pipShadowCv.getContext('2d');    // needs alpha - do not pass alpha:false
+    g.clearRect(0, 0, pipShadowCv.width, pipShadowCv.height);
+    g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 18; g.shadowOffsetY = 6;
+    g.fillStyle = '#000';
+    roundRectPath(g, PIP_SHADOW_PAD, PIP_SHADOW_PAD, box.w, box.h, box.r);
+    g.fill();
+  }
+  ctx.drawImage(pipShadowCv, box.x - PIP_SHADOW_PAD, box.y - PIP_SHADOW_PAD);
+}
 function draw_pip(){
   const { w, h } = canvasDims;
   drawMedia(0, 0, w, h, 0, 0);                  // imported fills canvas
   const box = pipBox();
-  // subtle shadow behind the box
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
-  ctx.fillStyle = '#000';
-  roundRectPath(ctx, box.x, box.y, box.w, box.h, box.r); ctx.fill();
-  ctx.restore();
+  drawPipShadow(box);
   // cover-cropped cam, pannable inside its box
   drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r, panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
 }
@@ -3146,12 +3439,29 @@ function drawFrame(){
    actually changes, so if drawFrame can't hit S.recFps the recording IS that
    slow — this is the number that tells you a take will come out choppy. */
 let fpsStamps = [], fpsLastUi = 0, measuredFps = 0;
+let takeFrames = 0;              // frames composited during the current take
+
+/* Per-stage frame budget. Two rounds of guessing at this bottleneck were wrong,
+   so measure it: which stage actually eats the 33ms is the only thing that says
+   what to change. Costs a handful of performance.now() calls per frame. */
+const PROF = { media:0, cam:0, draw:0, enc:0, n:0 };
+let profAvg = { media:0, cam:0, draw:0, enc:0, budget:33.3 };
+function profReset(){ PROF.media = PROF.cam = PROF.draw = PROF.enc = PROF.n = 0; }
+function profRoll(){
+  const n = Math.max(1, PROF.n);
+  profAvg = {
+    media: PROF.media/n, cam: PROF.cam/n, draw: PROF.draw/n, enc: PROF.enc/n,
+    budget: 1000 / (S.recording && S.mode !== MODES.NORMAL ? S.recFps : TARGET_FPS),
+  };
+  profReset();
+}
 function noteFrame(now){
   fpsStamps.push(now);
   while (fpsStamps.length && now - fpsStamps[0] > 1000) fpsStamps.shift();
   if (now - fpsLastUi < 400) return;
   fpsLastUi = now;
   measuredFps = fpsStamps.length;
+  profRoll();
   updatePerfHud();
 }
 function updatePerfHud(){
@@ -3163,9 +3473,21 @@ function updatePerfHud(){
   const pill = EL.perfPill;
   if (pill){
     pill.classList.toggle('show', struggling && S.mode !== MODES.NORMAL);
-    if (struggling) pill.textContent =
-      'Dropping frames — compositing at '+measuredFps+' of '+target+' fps. Lower Quality to '+
-      (S.res==='4K' ? '1440p' : '1080p')+(S.filtersDefault ? '' : ' or turn off Filters')+'.';
+    if (struggling){
+      // Name the stage that's actually over budget instead of offering generic
+      // advice — "lower Quality" is useless if the cost is the background video.
+      const a = profAvg, ms = x => x.toFixed(1);
+      let worst = 'media', worstV = a.media;
+      if (a.cam > worstV){ worst = 'cam'; worstV = a.cam; }
+      if (a.enc > worstV){ worst = 'enc'; worstV = a.enc; }
+      const cause =
+        worst === 'media' ? 'the background video ('+ms(a.media)+'ms/frame) — use a smaller or lower-resolution background clip'
+      : worst === 'cam'   ? 'the camera layer ('+ms(a.cam)+'ms/frame)'+(S.filtersDefault ? '' : ', mostly Filters — try turning them off')
+      :                     'the encoder ('+ms(a.enc)+'ms/frame) — lower the capture bitrate';
+      pill.textContent =
+        'Dropping frames — '+measuredFps+' of '+target+' fps. '+
+        ms(a.draw + a.enc)+'ms of a '+ms(a.budget)+'ms budget. Biggest cost is '+cause+'.';
+    }
   }
 }
 
@@ -3200,8 +3522,21 @@ function renderLoop(now){
   lastFrameTime = now;
   lastDrawAt = now;
   camFrameDirty = false;
+  const _tDraw = performance.now();
   drawFrame();
+  const _tEnc = performance.now();
+  PROF.draw += _tEnc - _tDraw;
   noteFrame(now);
+  // In Split/PiP the canvas IS the recorded surface, so this count is literally
+  // how many frames the take contains. Compared against wall time it tells you
+  // whether a choppy result was baked in at record time or introduced later.
+  if (S.recording && S.mode !== MODES.NORMAL) takeFrames++;
+  if (S.recording && hwRec){
+    const _t = performance.now();
+    hwCaptureFrame(now);
+    PROF.enc += performance.now() - _t;   // VideoFrame construction + encode submit
+  }
+  PROF.n++;
   if (S.recording) updateRecTimer();
 }
 function startRenderLoop(){
@@ -3229,12 +3564,20 @@ function ensureAudio(){
   micGain.connect(recordDest);
   reconnectMic();
 }
+/* startCamera() stops the old stream and opens a new one whenever quality, frame
+   rate or a device changes. The old guard here was `if (micSrc) return`, which
+   meant the graph stayed bolted to the DEAD stream forever after the first
+   connect — so any settings change silently produced Split/PiP takes with no mic
+   audio at all. Rebuild whenever the stream identity changes, and only then. */
+let micSrcStream = null;
 function reconnectMic(){
   if (!audioCtx || !micStream) return;
-  if (micSrc) return;                       // once per stream graph
+  if (micSrc && micSrcStream === micStream) return;   // already wired to THIS stream
+  if (micSrc){ try { micSrc.disconnect(); } catch(e){} micSrc = null; micSrcStream = null; }
   try {
     micSrc = audioCtx.createMediaStreamSource(micStream);
     micSrc.connect(micGain);
+    micSrcStream = micStream;
   } catch(e){ /* track may be gone */ }
 }
 function ensureImportAudio(){
@@ -3255,6 +3598,7 @@ function ensureImportAudio(){
    ============================================================ */
 let mediaRecorder=null, recChunks=[];
 let nextClipId = 1;            // stable per-clip id → waveform cache keyed by this, never by index
+let nextBlobKey = 1;           // stable per-RECORDING id (survives a split)
 
 function pickMime(){
   const opts = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
@@ -3328,6 +3672,274 @@ function buildRawRecordStream(){
   return stream;
 }
 
+/* ============================================================
+   HARDWARE-ENCODED RECORDING  (Split/PiP only)
+
+   MediaRecorder on a canvas stream encodes VP8 in SOFTWARE. In Split/PiP with a
+   video background the 33ms frame budget has to cover: decode the background
+   frame, composite it, composite the camera over it, AND software-encode the
+   result at full output resolution. That budget does not close at 1080p+, and
+   the take drops frames — which is unrecoverable, because the canvas IS the
+   recorded surface.
+
+   WebCodecs lets us hand each frame to the GPU encoder (NVENC / QuickSync / AMF)
+   instead, which is where the headroom is. Normal mode is untouched: it already
+   bypasses the canvas entirely by recording the raw camera track.
+
+   Falls back to the MediaRecorder path whenever the hardware config isn't
+   offered, so nothing here can cost you a take.
+   ============================================================ */
+/* H.264 levels cap BITRATE, not just resolution — and the capture bitrate here is
+   deliberately generous (32 Mbps at 1080p on auto). High@4.0 tops out near 25
+   Mbps, so choosing the level from resolution alone asks for a config the encoder
+   is entitled to refuse... which silently demoted the whole take to software VP8.
+   That's the bug behind "no GPU encoder at 1080p30". Pick by whichever constraint
+   binds, and keep the higher levels as fallbacks: an over-spec level is harmless,
+   an under-spec one is not. */
+const AVC_LEVELS = [
+  { codec:'avc1.640028', maxPx:1920*1088, maxMbps:25  },   // High@4.0
+  { codec:'avc1.640029', maxPx:1920*1088, maxMbps:62  },   // High@4.1
+  { codec:'avc1.64002A', maxPx:2048*1088, maxMbps:62  },   // High@4.2
+  { codec:'avc1.640032', maxPx:2560*1600, maxMbps:168 },   // High@5.0
+  { codec:'avc1.640033', maxPx:4096*2176, maxMbps:300 },   // High@5.1
+  { codec:'avc1.640034', maxPx:4096*2176, maxMbps:300 },   // High@5.2
+];
+function avcCandidates(w, h, mbps){
+  const px = w*h;
+  const fits = AVC_LEVELS.filter(L => px <= L.maxPx && mbps <= L.maxMbps);
+  const rest = AVC_LEVELS.filter(L => fits.indexOf(L) === -1);
+  return fits.concat(rest).map(L => L.codec);          // best fit first, then anything
+}
+
+let hwProbe = { key:'', codec:null, accel:'', reason:'' };
+/* What the encoder will actually be handed.
+   Canvas modes encode the composited canvas, so that's outputDims. Normal mode
+   encodes the camera's OWN frames untouched (that's what keeps its audio and
+   video on one capture clock), so the encoder has to be configured for the
+   camera's native size instead — asking NVENC for 1080p and feeding it 4K frames
+   is not the same request. */
+function hwTargetDims(){
+  if (S.mode === MODES.NORMAL && camVid.videoWidth){
+    return { w: even(camVid.videoWidth), h: even(camVid.videoHeight) };
+  }
+  const d = outputDims(S.res);
+  return { w: even(d.w), h: even(d.h) };
+}
+function hwKey(){
+  const d = hwTargetDims();
+  return S.mode+'/'+d.w+'x'+d.h+'@'+S.recFps+'/'+recordBitrateMbps();
+}
+/* Probed ahead of time, never inside startRecording — hitting Space must start a
+   take immediately, not await a capability check. */
+async function probeHwEncoder(){
+  const key = hwKey();
+  if (hwProbe.key === key) return hwProbe.codec;
+  // 'pending' matters: every settings handler kicks off this probe and then calls
+  // checkExportWarning() synchronously. Without a pending flag that window reads
+  // as "no hardware" and flashes a false 'software VP8' warning on every single
+  // quality / frame-rate / bitrate change.
+  hwProbe = { key, codec:null, accel:'', reason:'', pending:true };
+
+  // Name what's actually missing. "No GPU encoder" is a useless thing to be told
+  // when the real answer is that this browser doesn't expose the API at all.
+  const missing = [];
+  if (!('VideoEncoder' in window))              missing.push('VideoEncoder');
+  if (!('AudioEncoder' in window))              missing.push('AudioEncoder');
+  if (!('MediaStreamTrackProcessor' in window)) missing.push('MediaStreamTrackProcessor');
+  if (typeof Mp4Muxer === 'undefined')          missing.push('Mp4Muxer');
+  if (missing.length){
+    hwProbe.reason = 'this browser has no ' + missing.join(' / ');
+    hwProbe.pending = false;
+    console.warn('[meatcord] hardware recording unavailable:', hwProbe.reason);
+    checkExportWarning();
+    return null;
+  }
+
+  const dims  = hwTargetDims();
+  const mbps  = recordBitrateMbps();
+  const cands = avcCandidates(dims.w, dims.h, mbps);
+  const tryOne = async (codec, hw) => {
+    try {
+      const r = await VideoEncoder.isConfigSupported({
+        codec, width:dims.w, height:dims.h,
+        bitrate: Math.round(mbps*1e6), framerate:S.recFps,
+        hardwareAcceleration:hw, latencyMode:'realtime',
+      });
+      return !!(r && r.supported);
+    } catch(e){ return false; }
+  };
+
+  for (const c of cands){
+    if (hwProbe.key !== key) return hwProbe.codec;      // a newer probe owns the flag now
+    if (await tryOne(c, 'prefer-hardware')){ hwProbe.codec = c; hwProbe.accel = 'prefer-hardware'; break; }
+  }
+  if (!hwProbe.codec){
+    // Even a software H.264 through WebCodecs beats MediaRecorder's VP8: same
+    // muxer, same MP4 out, and it still leaves the compositor more headroom.
+    for (const c of cands){
+      if (hwProbe.key !== key) return hwProbe.codec;
+      if (await tryOne(c, 'no-preference')){ hwProbe.codec = c; hwProbe.accel = 'no-preference'; break; }
+    }
+  }
+  if (!hwProbe.codec){
+    hwProbe.reason = 'no H.264 encoder accepted '+dims.w+'\u00d7'+dims.h+' at '+mbps+' Mbps';
+    console.warn('[meatcord] hardware recording unavailable:', hwProbe.reason, 'tried:', cands);
+  }
+  hwProbe.pending = false;
+  checkExportWarning();          // the probe is async; refresh once it lands
+  return hwProbe.codec;
+}
+
+function hwReady(){ return !!hwProbe.codec && hwProbe.key === hwKey(); }
+/* True when the probe's answer belongs to a DIFFERENT configuration than the one
+   we're about to record. Every input to hwKey() (mode, output size, fps, bitrate,
+   and in Normal mode the camera's own size) can change from more places than it
+   is practical to enumerate — mode switching was missed once already and silently
+   dropped every canvas take back to software VP8. So rather than hunting call
+   sites, treat a stale key as "not answered yet": start a probe and stay quiet
+   until it lands. */
+let hwProbeQueued = false;
+function hwStale(){ return hwProbe.key !== hwKey(); }
+function hwEnsureProbed(){
+  if (!hwStale() || hwProbe.pending || hwProbeQueued) return;
+  hwProbeQueued = true;
+  Promise.resolve().then(() => { hwProbeQueued = false; probeHwEncoder(); });
+}
+
+let hwRec = null;
+let recImportStart = null;       // survives to stop time on the async hw path
+
+function hwStartRecording(){
+  // NORMAL records the camera's own tracks; SPLIT/PiP records the canvas plus the
+  // WebAudio mix. Both encode on the GPU, they just differ in where frames and
+  // audio come from.
+  const isRaw = (S.mode === MODES.NORMAL);
+  const vTrack = isRaw && micStream ? micStream.getVideoTracks()[0] : null;
+  const track  = isRaw
+    ? (micStream && micStream.getAudioTracks()[0])
+    : (recordDest && recordDest.stream.getAudioTracks()[0]);
+  if (!track) return false;
+  if (isRaw && !vTrack) return false;
+  const dims = hwTargetDims();
+  if (!dims.w || !dims.h) return false;
+  const sr    = isRaw ? (track.getSettings().sampleRate || audioCtx.sampleRate) : audioCtx.sampleRate;
+  const chans = isRaw ? (track.getSettings().channelCount || 1) : 2;
+
+  let muxer, venc, aenc, reader;
+  try {
+    const { Muxer, ArrayBufferTarget } = Mp4Muxer;
+    muxer = new Muxer({
+      target: new ArrayBufferTarget(),
+      video: { codec:'avc', width:dims.w, height:dims.h, frameRate:S.recFps },
+      audio: { codec:'aac', numberOfChannels:chans, sampleRate:sr },
+      fastStart: 'in-memory',
+      // Video timestamps start near 0 (wall clock from t0) while audio timestamps
+      // come off the track's own clock. Offsetting each track to its own first
+      // timestamp is what lines the two up.
+      firstTimestampBehavior: 'offset',
+    });
+    const onErr = e => { if (hwRec) hwRec.err = hwRec.err || e; console.error('hw record:', e); };
+    venc = new VideoEncoder({ output:(c,m)=>{ try{ muxer.addVideoChunk(c,m); }catch(e){ onErr(e); } }, error:onErr });
+    venc.configure({
+      codec: hwProbe.codec, width:dims.w, height:dims.h,
+      bitrate: Math.round(recordBitrateMbps()*1e6), framerate:S.recFps,
+      hardwareAcceleration: hwProbe.accel || 'no-preference',
+      latencyMode:'realtime',               // live capture: no lookahead delay
+      avc:{ format:'avc' },
+    });
+    aenc = new AudioEncoder({ output:(c,m)=>{ try{ muxer.addAudioChunk(c,m); }catch(e){ onErr(e); } }, error:onErr });
+    aenc.configure({ codec:'mp4a.40.2', sampleRate:sr, numberOfChannels:chans, bitrate:192000 });
+    reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
+  } catch(e){
+    console.warn('hardware recorder unavailable, using MediaRecorder:', e);
+    try { if (venc && venc.state !== 'closed') venc.close(); } catch(_){}
+    try { if (aenc && aenc.state !== 'closed') aenc.close(); } catch(_){}
+    return false;
+  }
+
+  hwRec = { muxer, venc, aenc, reader, vReader:null, t0:performance.now(), lastKey:-1e9,
+            frames:0, skipped:0, err:null, stopping:false,
+            isRaw, look: isRaw ? snapshotLook() : null };
+
+  // Raw path: frames come straight off the camera track, never via the canvas.
+  // Their timestamps share the capture clock with the audio track above, which is
+  // what preserves the perfect A/V sync Normal mode exists for.
+  if (isRaw){
+    try {
+      hwRec.vReader = new MediaStreamTrackProcessor({ track: vTrack }).readable.getReader();
+    } catch(e){
+      console.warn('raw frame processor unavailable:', e);
+      try { venc.close(); aenc.close(); } catch(_){}
+      hwRec = null; return false;
+    }
+    (async () => {
+      try {
+        for(;;){
+          const { value:frame, done } = await hwRec.vReader.read();
+          if (done) break;
+          const R = hwRec;
+          if (!R || R.stopping || R.err){ frame.close(); break; }
+          if (R.venc.encodeQueueSize > 6){ R.skipped++; frame.close(); continue; }
+          const nowMs = performance.now();
+          const key = (nowMs - R.lastKey) >= 2000;
+          try { R.venc.encode(frame, { keyFrame:key }); if (key) R.lastKey = nowMs; R.frames++; }
+          catch(e){ R.err = R.err || e; }
+          frame.close();
+        }
+      } catch(e){ /* cancelled at stop */ }
+    })();
+  }
+
+  // Pump mic/mix audio straight into the encoder for the life of the take.
+  (async () => {
+    try {
+      for(;;){
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!hwRec || hwRec.stopping){ value.close(); break; }
+        try { hwRec.aenc.encode(value); } catch(e){ /* one bad packet must not end the take */ }
+        value.close();
+      }
+    } catch(e){ /* reader cancelled at stop */ }
+  })();
+  return true;
+}
+
+/* Called once per composited frame while a hardware take is rolling. */
+function hwCaptureFrame(nowMs){
+  const R = hwRec;
+  if (!R || R.stopping || R.err || R.isRaw) return;   // raw takes pull from the camera track
+  // If the encoder is genuinely backed up, skipping beats blocking the
+  // compositor — a stalled main thread would drop the frame anyway AND freeze
+  // the preview. Counted so the HUD can name the encoder as the bottleneck.
+  if (R.venc.encodeQueueSize > 6){ R.skipped++; return; }
+  const key = (nowMs - R.lastKey) >= 2000;           // keyframe every 2s
+  try {
+    const frame = new VideoFrame(canvas, { timestamp: Math.max(0, Math.round((nowMs - R.t0) * 1000)) });
+    R.venc.encode(frame, { keyFrame: key });
+    frame.close();
+    if (key) R.lastKey = nowMs;
+    R.frames++;
+  } catch(e){ R.err = R.err || e; }
+}
+
+async function hwStopRecording(){
+  const R = hwRec;
+  if (!R) return null;
+  R.stopping = true;                       // set synchronously: no further frames
+  try { await R.reader.cancel(); } catch(e){}
+  try { if (R.vReader) await R.vReader.cancel(); } catch(e){}
+  try { await R.venc.flush(); } catch(e){}
+  try { await R.aenc.flush(); } catch(e){}
+  try { if (R.venc.state !== 'closed') R.venc.close(); } catch(e){}
+  try { if (R.aenc.state !== 'closed') R.aenc.close(); } catch(e){}
+  let blob = null;
+  try { R.muxer.finalize(); blob = new Blob([R.muxer.target.buffer], { type:'video/mp4' }); }
+  catch(e){ console.error('mux failed:', e); }
+  hwRec = null;
+  return blob;
+}
+
 function startRecording(){
   if (S.recording || !S.camReady) return;
 
@@ -3339,6 +3951,18 @@ function startRecording(){
     if (audioCtx.state === 'suspended') audioCtx.resume();
     setCanvasDims(outputDims(S.res));   // swap preview → full-res record surface
     drawFrame();                        // paint one full-res frame before capture starts
+  }
+
+  // GPU encoder first, for BOTH flavours. Normal mode needs it just as much:
+  // MediaRecorder software-VP8 on a raw 4K camera track only sustained 20fps.
+  if (hwProbe.codec && hwProbe.key === hwKey() && hwStartRecording()){
+    recImportStart = (!isRaw && S.hasMedia && S.mediaKind==='video') ? importVid.currentTime : null;
+    S.recording = true;
+    S.recStart = performance.now();
+    takeFrames = 0;
+    if (!isRaw && S.hasMedia && S.mediaKind === 'video'){ importVid.play().catch(()=>{}); S.importPlaying = true; }
+    reflectRecordingUI(true);
+    return;
   }
 
   const stream = isRaw ? buildRawRecordStream() : buildRecordStream();
@@ -3371,15 +3995,22 @@ function startRecording(){
   mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     // wait for onstop before assembling — late chunks already flushed here
-    const blob = new Blob(recChunks, { type:'video/webm' });
+    // Label the blob with what was ACTUALLY recorded. This was hardcoded to webm,
+    // which silently mislabels the file the moment the recorder picks anything else.
+    const recType = (mediaRecorder && mediaRecorder.mimeType) || 'video/webm';
+    const blob = new Blob(recChunks, { type: recType.split(';')[0] });
     recChunks = [];      // the Blob owns the data now; don't hold a second reference
                          // to a whole take until the next record starts
     const dur = (performance.now() - S.recStart) / 1000;
-    addClip(blob, dur, importStartT, isRaw, isRaw ? snapshotLook() : null);
+    // Raw (Normal) takes come off the camera track, so the canvas count says
+    // nothing about them — only canvas modes get a meaningful figure.
+    const capFps = (!isRaw && dur > 0.2) ? (takeFrames / dur) : 0;
+    addClip(blob, dur, importStartT, isRaw, isRaw ? snapshotLook() : null, capFps);
   };
   mediaRecorder.start();
   S.recording = true;
   S.recStart = performance.now();
+  takeFrames = 0;
 
   // Imported video only composites in Split/PiP; never let its audio leak into a
   // Normal take (which records the camera tracks only).
@@ -3393,7 +4024,26 @@ function startRecording(){
 function stopRecording(){
   if (!S.recording) return;
   S.recording = false;
-  try { mediaRecorder.stop(); } catch(e){}
+  if (hwRec){
+    // Snapshot the take's facts before the async flush; state moves on meanwhile.
+    const dur = (performance.now() - S.recStart) / 1000;
+    const wasRaw = hwRec.isRaw, rawLook = hwRec.look;
+    // Raw takes never touch the canvas, so count what the encoder actually took
+    // from the camera instead of composited frames.
+    const capFps = dur > 0.2 ? ((wasRaw ? hwRec.frames : takeFrames) / dur) : 0;
+    const importStartT = recImportStart;
+    const skipped = hwRec.skipped;
+    hwStopRecording().then(blob => {
+      if (blob && blob.size) addClip(blob, dur, importStartT, wasRaw, rawLook, capFps);
+      else toast('That take failed to encode and was not saved.', true);
+      if (skipped > 0){
+        toast('Encoder fell behind on '+skipped+' frame'+(skipped>1?'s':'')+
+              ' — lower Quality or capture bitrate.', true);
+      }
+    });
+  } else {
+    try { mediaRecorder.stop(); } catch(e){}
+  }
   // recorder has stopped capturing → return the canvas to the capped preview size
   if (S.mode !== MODES.NORMAL) setCanvasDims(previewDims());
   if (S.hasMedia && S.mediaKind === 'video'){ importVid.pause(); S.importPlaying = false; updateImpPlayBtn(); }
@@ -3422,10 +4072,14 @@ function reflectRecordingUI(on){
 /* ============================================================
    CLIPS — schema defined once, all fields always present.
    ============================================================ */
-function addClip(blob, duration, importStart, raw, look){
+function addClip(blob, duration, importStart, raw, look, capFps){
   const clip = {
     id: nextClipId++,           // stable identity for the life of this clip
     blob,
+    // Identifies the RECORDING, not the clip. Splitting produces two clips that
+    // share one recording, and they must share one stored blob rather than
+    // writing the same hundred megabytes to disk twice.
+    blobKey: 'b'+(nextBlobKey++),
     duration: Math.max(0.05, duration),
     trimStart: 0,
     trimEnd: Math.max(0.05, duration),
@@ -3434,8 +4088,16 @@ function addClip(blob, duration, importStart, raw, look){
     importStart: (importStart==null ? null : importStart),
     raw: !!raw,                 // true → recorded straight from camera, look applied at playback
     look: look || null,         // { fit, scale, panX, panY, mirror, filterStr } for raw clips
+    capFps: capFps || 0,        // frames/sec actually composited (canvas modes only; 0 = n/a)
   };
   S.clips.push(clip);
+  // Say it now, while the take can still be re-shot, rather than at export when
+  // the damage is already baked into the clip.
+  if (clip.capFps && clip.capFps < S.recFps * 0.85){
+    toast('That take composited at '+clip.capFps.toFixed(0)+' of '+S.recFps+
+          ' fps — it will look choppy. Lower Quality, or use Normal mode.', true);
+  }
+  persistClipBlob(clip);        // written once; never rewritten
   generateThumb(clip);
   rebuildTimeline();
   refreshClipDependentUI();
@@ -3449,6 +4111,8 @@ function addClip(blob, duration, importStart, raw, look){
 function undoClip(){
   if (S.recording || !S.clips.length) return;
   const clip = S.clips.pop();       // waveCache is a WeakMap on the blob — it goes with it
+  releaseClipBlob(clip);            // an undone take leaves nothing behind, on disk either
+  saveDraftNow();
   // restore imported video to where it was when that clip started
   if (clip.importStart != null && S.hasMedia && S.mediaKind === 'video'){
     try { importVid.currentTime = clip.importStart; } catch(e){}
@@ -3486,6 +4150,7 @@ function generateThumb(clip){
       }
       clip.thumb = workCv.toDataURL('image/jpeg', 0.6);
       rebuildTimeline();
+      saveDraftNow();               // thumb lands after the clip was first stored
     } catch(e){}
     done();
   }, { once:true });
@@ -3525,7 +4190,8 @@ function rebuildTimeline(){
           '<button data-act="left" '+(i===0?'disabled':'')+'>‹</button>'+
           '<button data-act="right" '+(i===S.clips.length-1?'disabled':'')+'>›</button>'+
         '</div>'+
-        '<div class="tip">'+clip.duration.toFixed(1)+'s</div>';
+        '<div class="tip">'+clip.duration.toFixed(1)+'s'+
+          (clip.capFps ? ' · '+clip.capFps.toFixed(0)+'fps' : '')+'</div>';
       tl.appendChild(pill);
     });
     lastTimelineCount = S.clips.length;
@@ -3562,15 +4228,20 @@ function clearImport(){
   S.hasMedia = false; S.mediaKind = null; S.importPlaying = false;
   importVid.pause(); importVid.removeAttribute('src'); importVid.load && importVid.load();
   filmGen++;                                  // retire any in-flight filmstrip build
+  lastImportFile = null;
+  if (S.draftId){ blobDel(S.draftId+'/media').catch(()=>{}); saveDraftNow(); }
   $('scrub-film').innerHTML = '';
   $('media-info').textContent = '';
   $('video-tools').style.display = 'none';
   if (S.mode !== MODES.NORMAL) toast('Imported media removed.');
 }
 
+let lastImportFile = null;      // so a draft created LATER can still store it
 function loadFile(file){
   if (!file) return;
   clearImportKeepGraph();
+  lastImportFile = file;
+  if (S.draftId) persistMedia(file);
   importObjectURL = URL.createObjectURL(file);
   if (file.type.startsWith('image/')){
     importImg = new Image();
@@ -4040,7 +4711,8 @@ function moveClip(dir){
 function deleteClip(){
   if (S.clips.length === 0) return;
   if (!confirm('Delete clip '+(pvIndex+1)+'? This cannot be undone.')) return;
-  S.clips.splice(pvIndex,1);
+  const removed = S.clips.splice(pvIndex,1)[0];
+  releaseClipBlob(removed); saveDraftNow();
   lastTimelineCount = -1; rebuildTimeline(); refreshClipDependentUI();
   if (S.clips.length === 0){ closeEditor(); return; }
   rebuildBlobUrls(); rebuildOffsets(); rebuildScrubMarks();
@@ -4080,6 +4752,7 @@ function pickAvcCodec(w,h){
    fragmented, variable-frame-rate output. Falls back to the old MediaRecorder
    path automatically if WebCodecs or the muxer isn't present. */
 let cancelExport = false;
+let exportHealthWarning = '';     // set by an export that produced damaged frames
 
 /* One export run = a list of JOBS, each job = (clips → one file).
    "Export all clips"        → 1 job holding every clip, stitched in order.
@@ -4095,6 +4768,7 @@ async function exportAll(separate){
 
   exporting = true;
   cancelExport = false;
+  exportHealthWarning = '';
   const wasEditOpen = S.editOpen;
   stopRenderLoop();
 
@@ -4146,7 +4820,8 @@ async function exportAll(separate){
     if (!wasEditOpen) startRenderLoop();
   }
 
-  if (failed)           toast('Export failed: '+((failed && failed.message) || 'unknown error'), true);
+  if (exportHealthWarning && !failed && !cancelExport) toast(exportHealthWarning, true);
+  else if (failed)      toast('Export failed: '+((failed && failed.message) || 'unknown error'), true);
   else if (cancelExport) toast('Stopped — '+done+' of '+jobs.length+' file'+(jobs.length>1?'s':'')+' saved.', true);
   else if (webmOnly)     toast('MP4 not supported by this browser — exported WebM instead. Update Chrome for MP4.', true);
   else if (multi)        toast(done+' clips exported as separate MP4s — check your downloads.');
@@ -4177,7 +4852,9 @@ async function exportWebCodecs(clips, filename, opts){
     const plan = []; let totalFrames = 0;
     for (const clip of clips){
       const n = Math.max(1, Math.round(effDur(clip) * FPS));
-      plan.push({ clip, startFrame: totalFrames, frames: n });
+      // dupes/padded record how honest each clip's frames actually were, so a
+      // choppy export reports itself instead of shipping silently.
+      plan.push({ clip, startFrame: totalFrames, frames: n, dupes:0, padded:0 });
       totalFrames += n;
     }
     if (!totalFrames) throw new Error('nothing to export');
@@ -4300,11 +4977,13 @@ async function exportWebCodecs(clips, filename, opts){
         else { done = true; if(url) try{ URL.revokeObjectURL(url); }catch(_){} reject(e); }
       };
       const emitUpTo = (srcTime) => {
+        let n = 0;
         while (k < p.frames){
           const srcK = clip.trimStart + (k/FPS)*clip.speed;
           if (srcK > srcTime + 1e-4) break;
-          encodeAt(base + k); k++; gf++;
+          encodeAt(base + k); k++; gf++; n++;
         }
+        return n;                    // >1 means this source frame was duplicated
       };
       try {
         v = document.createElement('video');
@@ -4313,19 +4992,64 @@ async function exportWebCodecs(clips, filename, opts){
         await new Promise((r,j)=>{ v.onloadeddata = r; v.addEventListener('error', ()=>j(new Error('clip load failed')), {once:true}); });
         // one seek per clip to the trim-in point
         await new Promise((r)=>{ const ok=()=>r(); v.addEventListener('seeked', ok, {once:true}); try{ v.currentTime = clip.trimStart; }catch(e){ ok(); } setTimeout(ok, 800); });
-        // A ~60Hz display presents at most ~60 frames/sec, and we need FPS grid
-        // frames per second of SOURCE time. At a 30fps grid we can safely run 2x
-        // (60 presented ⇒ 30 captured). At a 60fps grid, 2x would demand 120
-        // presented frames/sec — the browser would drop source frames and we'd
-        // silently bake 30fps motion into a 60fps file. So cap the rate.
-        v.playbackRate = FPS >= 60 ? 1 : 2;
+        // Playback rate must respect DECODE throughput, not just display refresh.
+        // The old rule reasoned only about the monitor (60Hz presents 60 frames,
+        // so 2x on a 30fps grid "fits") and ignored whether the frames can be
+        // DECODED that fast. A 1440p/4K webm frequently cannot be: the decoder
+        // falls behind, the browser stops presenting some frames, rVFC never
+        // fires for them, and emitUpTo() fills the gap with copies of the last
+        // drawn frame. That is exactly the "choppy, stuck on certain frames"
+        // failure, and it scales with resolution — which is why it shows up at
+        // 1440p and not at 1080p.
+        const srcPixels = (v.videoWidth||0) * (v.videoHeight||0);
+        const RATES = (FPS >= 60 || srcPixels > 1920*1080) ? [1, 0.5] : [2, 1, 0.5];
+        let rateIdx = 0;
+        v.playbackRate = RATES[0];
+
+        // Detecting "the decoder can't keep up" has one trap: a decoder that
+        // skips UNIFORMLY produces evenly spaced gaps, so comparing gap sizes to
+        // each other finds nothing anomalous and never backs off. So trust the
+        // pipeline's own dropped-frame counter first — that is precisely what it
+        // reports — and keep gap analysis only as a fallback where the API is
+        // missing.
+        const vq = () => { try { return v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null; } catch(e){ return null; } };
+        let minDelta = Infinity, lastM = -1, skips = 0, seen = 0;
+        let baseDropped = (vq() || {}).droppedVideoFrames || 0;
+        const noteTiming = (M) => {
+          seen++;
+          if (lastM >= 0){
+            const d = M - lastM;
+            if (d > 1e-4 && d < minDelta) minDelta = d;
+            if (minDelta < Infinity && d > minDelta * 1.8) skips++;
+          }
+          lastM = M;
+          if (rateIdx >= RATES.length-1 || seen < 12) return;
+
+          const q = vq();
+          const dropped = q ? (q.droppedVideoFrames - baseDropped) : 0;
+          // Step down only on sustained evidence, never a single hiccup, and only
+          // ever downward — a slower pass takes longer but tells the truth.
+          if (dropped >= seen * 0.15 || skips >= seen * 0.15){
+            rateIdx++;
+            v.playbackRate = RATES[rateIdx];
+            skips = 0; seen = 0; minDelta = Infinity;
+            if (q) baseDropped = q.droppedVideoFrames;
+          } else if (seen >= 48){
+            // rolling window, so early evidence can't pile up into a false trigger
+            skips = 0; seen = 0;
+            if (q) baseDropped = q.droppedVideoFrames;
+          }
+        };
+
         const onFrame = (now, meta) => {
           if (done) return;
           if (encErr) return fail(encErr);
           started = true;
           const M = (meta && typeof meta.mediaTime==='number') ? meta.mediaTime : v.currentTime;
+          noteTiming(M);
           drawClipFrame(v, clip);
-          emitUpTo(M);
+          const n = emitUpTo(M);
+          if (n > 1) p.dupes += n - 1;
           tick();
           if (encErr) return fail(encErr);
           if (k >= p.frames || M >= clip.trimEnd - 1e-3){ finish(); return; }
@@ -4336,8 +5060,19 @@ async function exportWebCodecs(clips, filename, opts){
           }
           v.requestVideoFrameCallback(onFrame);
         };
-        // video ended before all output frames (audio longer than video) → hold last
-        v.addEventListener('ended', () => { if (done) return; started = true; fillRest(); finish(); });
+        // Video ended before all output frames were emitted. That means the take's
+        // VIDEO track is shorter than its AUDIO track — which is what a stalled
+        // canvas capture produces, since clip.duration is reconciled from the audio.
+        // Holding the last frame is the only option that keeps A/V in sync
+        // (truncating would cut the audio), but record how much was padded so a
+        // long freeze gets reported instead of silently shipping.
+        v.addEventListener('ended', () => {
+          if (done) return;
+          started = true;
+          p.padded += Math.max(0, p.frames - k);
+          fillRest();
+          finish();
+        });
         await v.play();
         v.requestVideoFrameCallback(onFrame);
       } catch(e){ fail(e); }
@@ -4373,6 +5108,26 @@ async function exportWebCodecs(clips, filename, opts){
         gf = before;                                  // rewind any partial emits for this clip
         await renderClipSeek(p);
       }
+    }
+
+    // Surface real frame damage. Silent choppiness is the worst outcome here:
+    // the file looks fine in the modal and wrong in the editor you upload it to.
+    // Exporting a faster grid than you captured duplicates frames BY DEFINITION
+    // (60fps out of a 30fps take is every frame twice). That is not a decode
+    // fault and already has its own warning, so don't blame the decoder for it.
+    const gridOutrunsCapture = S.expFps > S.recFps;
+    const badDupes  = gridOutrunsCapture ? [] : plan.filter(x => x.dupes > x.frames * 0.08);
+    const badPadded = plan.filter(x => x.padded > x.frames * 0.02);
+    if (badPadded.length){
+      const c = badPadded[0];
+      exportHealthWarning = 'Clip '+(clips.indexOf(c.clip)+1)+' ran out of video '+
+        (c.padded/FPS).toFixed(1)+'s before its audio ended, so it freezes on the last frame. '+
+        'That take dropped frames while recording — lower Quality or use Normal mode.';
+    } else if (badDupes.length){
+      const c = badDupes[0];
+      exportHealthWarning = 'Clip '+(clips.indexOf(c.clip)+1)+' duplicated '+
+        Math.round(c.dupes/c.frames*100)+'% of its frames — the source could not be decoded '+
+        'fast enough. The motion is choppier than the take actually was.';
     }
 
     $('modal-sub').textContent = pfx+'Finalizing…';
@@ -4565,6 +5320,703 @@ function downloadBlob(blob, name){
 }
 
 /* ============================================================
+   OBS BRIDGE — obs-websocket v5, spoken directly.
+
+   SCOPE, deliberately narrow: OBS supplies the CAMERA IMAGE through its Virtual
+   Camera, and this socket switches which OBS scene is feeding that pipe. That's
+   all it does.
+
+   OBS does NOT record here and does NOT own layout. Handing it those jobs cost
+   the three things that make the take loop work: backgrounds stop being
+   drag-and-drop, the imported video no longer rolls only while a take rolls, and
+   undo can no longer rewind that background to where the take began. OBS has no
+   concept of a take, so none of it survives the trip.
+
+   Pick "OBS Virtual Camera" as the video source in the Camera panel; the scene
+   buttons here then change the look coming down that pipe mid-session.
+
+   No client library: the protocol is a handful of JSON opcodes over a plain
+   WebSocket, and vendoring a dependency would break the "one file, works offline"
+   rule the muxer above already had to bend.
+
+   Opcodes used: 0 Hello / 1 Identify / 2 Identified / 5 Event / 6 Request /
+   7 RequestResponse.
+   ============================================================ */
+const OBS = {
+  ws:null, identified:false, reqN:0,
+  pending:new Map(),          // requestId -> {resolve, reject}
+  scenes:[], currentScene:'',
+};
+// Subscriptions: General(1) | Scenes(4). No Outputs — we don't drive recording,
+// so OBS's record state is none of our business.
+const OBS_SUBS = 1 | 4;
+
+function obsConnected(){ return !!(OBS.ws && OBS.ws.readyState === 1 && OBS.identified); }
+
+/* OBS auth: base64(sha256(password + salt)) -> secret,
+             base64(sha256(secret + challenge)) -> what we send back. */
+async function sha256b64(str){
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  let bin = ''; const bytes = new Uint8Array(digest);
+  for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function obsConnect(url, password){
+  return new Promise((resolve, reject) => {
+    let ws;
+    try { ws = new WebSocket(url); }
+    catch(e){ reject(new Error('Bad server address')); return; }
+    OBS.ws = ws;
+    OBS.identified = false;
+
+    const failEarly = () => reject(new Error(
+      'Could not reach OBS. Check it is running and that Tools → WebSocket Server Settings has the server enabled.'));
+
+    ws.onerror = () => { if (!OBS.identified) failEarly(); };
+    ws.onclose = () => {
+      const wasUp = OBS.identified;
+      OBS.identified = false; OBS.ws = null;
+      // reject anything in flight rather than leaving it hanging forever
+      OBS.pending.forEach(p => p.reject(new Error('OBS connection closed')));
+      OBS.pending.clear();
+      obsReflectStatus();
+      // The camera feed is the Virtual Camera, not this socket — losing the
+      // socket costs scene switching and nothing else. Say so, so a dropped
+      // connection mid-session doesn't read as "my recording is broken".
+      if (wasUp) toast('OBS control disconnected — the camera feed is unaffected.', true);
+      else failEarly();
+    };
+
+    ws.onmessage = async ev => {
+      let msg; try { msg = JSON.parse(ev.data); } catch(e){ return; }
+      if (msg.op === 0){                                  // Hello -> Identify
+        const d = { rpcVersion:1, eventSubscriptions:OBS_SUBS };
+        if (msg.d && msg.d.authentication){
+          if (!password){ reject(new Error('This OBS server requires a password.')); ws.close(); return; }
+          try {
+            const secret = await sha256b64(password + msg.d.authentication.salt);
+            d.authentication = await sha256b64(secret + msg.d.authentication.challenge);
+          } catch(e){
+            reject(new Error('Password hashing unavailable — serve the app over http://localhost instead of opening the file directly.'));
+            ws.close(); return;
+          }
+        }
+        ws.send(JSON.stringify({ op:1, d }));
+      } else if (msg.op === 2){                           // Identified
+        OBS.identified = true;
+        resolve();
+      } else if (msg.op === 5){                           // Event
+        obsOnEvent(msg.d.eventType, msg.d.eventData || {});
+      } else if (msg.op === 7){                           // RequestResponse
+        const p = OBS.pending.get(msg.d.requestId);
+        if (!p) return;
+        OBS.pending.delete(msg.d.requestId);
+        const st = msg.d.requestStatus || {};
+        if (st.result) p.resolve(msg.d.responseData || {});
+        else p.reject(new Error(st.comment || ('OBS refused '+msg.d.requestId)));
+      }
+    };
+  });
+}
+
+function obsRequest(type, data){
+  return new Promise((resolve, reject) => {
+    if (!obsConnected()){ reject(new Error('OBS not connected')); return; }
+    const id = 'mc'+(++OBS.reqN);
+    OBS.pending.set(id, { resolve, reject });
+    try { OBS.ws.send(JSON.stringify({ op:6, d:{ requestType:type, requestId:id, requestData:data||{} } })); }
+    catch(e){ OBS.pending.delete(id); reject(e); return; }
+    setTimeout(() => {
+      if (OBS.pending.has(id)){ OBS.pending.delete(id); reject(new Error(type+' timed out')); }
+    }, 10000);
+  });
+}
+
+function obsOnEvent(type, data){
+  if (type === 'CurrentProgramSceneChanged'){
+    OBS.currentScene = data.sceneName || '';
+    obsRenderScenes();                    // scene may have been switched inside OBS
+  } else if (type === 'SceneListChanged'){
+    obsLoadScenes().catch(()=>{});
+  }
+}
+
+async function obsLoadScenes(){
+  const r = await obsRequest('GetSceneList');
+  // OBS returns scenes in reverse UI order; flip so the list reads like OBS
+  OBS.scenes = (r.scenes||[]).map(s => s.sceneName).reverse();
+  OBS.currentScene = r.currentProgramSceneName || '';
+  obsRenderScenes();
+}
+
+/* Scene buttons change what OBS pushes down the Virtual Camera, so they're a
+   "camera look" switch — intentionally NOT wired to Normal/Split/PiP, which stay
+   Meatcord's own canvas layouts. */
+function obsRenderScenes(){
+  const wrap = $('obs-scenes'); if (!wrap) return;
+  if (!obsConnected() || !OBS.scenes.length){
+    wrap.innerHTML = '<div class="media-info" style="margin:0">Connect to list scenes.</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  OBS.scenes.forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'btn' + (name === OBS.currentScene ? ' on' : '');
+    b.textContent = name;
+    b.style.marginBottom = '5px';
+    b.addEventListener('click', () => obsSetScene(name));
+    wrap.appendChild(b);
+  });
+}
+
+function obsSetScene(name){
+  obsRequest('SetCurrentProgramScene', { sceneName:name })
+    .then(() => { OBS.currentScene = name; obsRenderScenes(); })
+    .catch(e => toast('Scene switch failed: '+e.message, true));
+}
+
+function obsReflectStatus(){
+  const up = obsConnected();
+  const dot = $('obs-dot'), st = $('obs-status');
+  if (dot) dot.className = 'obs-dot' + (up ? ' on' : '');
+  if (st) st.textContent = up ? 'connected' : 'offline';
+  $('obs-connect').disabled = up;
+  $('obs-disconnect').disabled = !up;
+  obsRenderScenes();
+}
+
+/* ============================================================
+   VIDEO SOURCE PICKER
+   The whole point of the OBS route: choose "OBS Virtual Camera" here and OBS's
+   compositing/filters arrive as an ordinary camera track, leaving every
+   Meatcord behaviour (drag-drop backgrounds, record-synced playback, undo
+   rewind) exactly as it is.
+   ============================================================ */
+/* Fills a device <select>, returning whether the saved id still exists. A saved
+   device that has been unplugged (or an OBS Virtual Camera that isn't running)
+   must fall back to the system default rather than silently selecting some other
+   device. */
+function fillDeviceSelect(sel, devices, savedId, fallbackName){
+  const named = devices.some(d => d.label);
+  sel.innerHTML = '<option value="">System default</option>' +
+    devices.map((d,i) => {
+      const label = d.label || (fallbackName+' '+(i+1)+' (allow access to see names)');
+      return '<option value="'+d.deviceId.replace(/"/g,'&quot;')+'">'+label.replace(/</g,'&lt;')+'</option>';
+    }).join('');
+  const known = devices.some(d => d.deviceId === savedId);
+  sel.value = known ? savedId : '';
+  return { named, known };
+}
+
+async function refreshDevices(){
+  const camSel = $('cam-device'), micSel = $('mic-device');
+  if (!camSel && !micSel) return;
+  let all = [];
+  try { all = await navigator.mediaDevices.enumerateDevices(); } catch(e){ return; }
+  const cams = all.filter(d => d.kind === 'videoinput');
+  const mics = all.filter(d => d.kind === 'audioinput');
+
+  if (camSel){
+    // Labels are empty until permission has been granted once — until then the
+    // list is unusable, so say why instead of showing blank rows.
+    const { named, known } = fillDeviceSelect(camSel, cams, S.camDeviceId, 'Camera');
+    if (S.camDeviceId && !known) S.camDeviceId = '';
+    const note = $('cam-device-note');
+    if (note){
+      const vcam = cams.find(c => /obs\s*virtual/i.test(c.label||''));
+      note.textContent = !named
+        ? 'Allow camera access to see device names.'
+        : vcam ? 'OBS Virtual Camera detected — select it to route OBS through Meatcord.'
+               : 'No OBS Virtual Camera found. Start it in OBS (Controls → Start Virtual Camera).';
+    }
+  }
+  if (micSel){
+    const { named, known } = fillDeviceSelect(micSel, mics, S.micDeviceId, 'Microphone');
+    if (S.micDeviceId && !known) S.micDeviceId = '';
+    const note = $('mic-device-note');
+    if (note) note.textContent = named ? (mics.length + ' available') : 'allow access to see names';
+  }
+}
+
+/* ---- persistence (never the password) ---- */
+function obsSaveSettings(){
+  try {
+    localStorage.setItem('meatcord.obs', JSON.stringify({
+      url: $('obs-url').value, camDeviceId: S.camDeviceId, micDeviceId: S.micDeviceId,
+    }));
+  } catch(e){}
+}
+function obsLoadSettings(){
+  try {
+    const v = JSON.parse(localStorage.getItem('meatcord.obs') || '{}');
+    if (v.url) $('obs-url').value = v.url;
+    if (v.camDeviceId) S.camDeviceId = v.camDeviceId;
+    if (v.micDeviceId) S.micDeviceId = v.micDeviceId;
+  } catch(e){}
+}
+
+/* ============================================================
+   DRAFTS — come back to a session later.
+
+   IndexedDB, not localStorage: a single 4K take is tens of megabytes and
+   localStorage tops out around 5MB of *strings*. IDB stores Blobs natively and
+   is bounded by disk quota instead.
+
+   Clip recordings are written ONCE, when the take is made, and never rewritten —
+   they are immutable. Only the metadata (trims, speed, order, settings) is
+   re-saved as you work, and that is a few KB. So autosave costs nothing no matter
+   how much footage the draft holds.
+   ============================================================ */
+const DB_NAME = 'meatcord', DB_VER = 1;
+const ST_DRAFTS = 'drafts', ST_BLOBS = 'blobs';
+let _db = null;
+function idb(){
+  if (_db) return Promise.resolve(_db);
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open(DB_NAME, DB_VER);
+    rq.onupgradeneeded = () => {
+      const db = rq.result;
+      if (!db.objectStoreNames.contains(ST_DRAFTS)) db.createObjectStore(ST_DRAFTS, { keyPath:'id' });
+      if (!db.objectStoreNames.contains(ST_BLOBS))  db.createObjectStore(ST_BLOBS);
+    };
+    rq.onsuccess = () => { _db = rq.result; res(_db); };
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function idbDo(store, mode, fn){
+  return idb().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(store, mode);
+    const rq = fn(tx.objectStore(store));
+    tx.oncomplete = () => res(rq && rq.result);
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error);
+  }));
+}
+const draftPut  = rec => idbDo(ST_DRAFTS, 'readwrite', st => st.put(rec));
+const draftGet  = id  => idbDo(ST_DRAFTS, 'readonly',  st => st.get(id));
+const draftAll  = ()  => idbDo(ST_DRAFTS, 'readonly',  st => st.getAll());
+const draftDel  = id  => idbDo(ST_DRAFTS, 'readwrite', st => st.delete(id));
+const blobPut   = (k,b) => idbDo(ST_BLOBS, 'readwrite', st => st.put(b, k));
+const blobGet   = k   => idbDo(ST_BLOBS, 'readonly',  st => st.get(k));
+const blobDel   = k   => idbDo(ST_BLOBS, 'readwrite', st => st.delete(k));
+
+/* Settings worth carrying back. Deliberately a allow-list — dumping all of S
+   would drag runtime junk (rAF ids, the recording flag, live clip objects) into
+   storage and restore the app into a state it was never in. */
+const DRAFT_KEYS = ['mode','ar','res','recFps','expFps','recBitrate','expRes','expBitrate',
+  'mirror','fit','camScale','camPanX','camPanY','f','splitDivider','splitTopPanX','splitTopPanY',
+  'splitBotPanX','splitBotPanY','pip','mediaFit','micVol','importVol'];
+
+function draftSettings(){
+  const o = {};
+  for (const k of DRAFT_KEYS) o[k] = (k==='f'||k==='pip') ? JSON.parse(JSON.stringify(S[k])) : S[k];
+  return o;
+}
+function clipMeta(c){
+  return { id:c.id, blobKey:c.blobKey, duration:c.duration, trimStart:c.trimStart, trimEnd:c.trimEnd,
+           speed:c.speed, thumb:c.thumb, importStart:c.importStart, raw:c.raw, look:c.look,
+           capFps:c.capFps, obsFile:c.obsFile || null, blobType:(c.blob && c.blob.type) || 'video/mp4' };
+}
+
+/* ============================================================
+   PROJECT FOLDER (File System Access API)
+
+   When a folder is linked, a draft is a real directory you can open in Explorer:
+
+     <projects>/Ramen episode/
+        project.json      settings, trims, clip order
+        take-01.mp4       the recordings themselves
+        take-02.mp4
+        background.png
+
+   Files are named after the RECORDING, not its timeline position, so reordering
+   clips rewrites a few KB of JSON instead of renaming gigabytes of video.
+
+   Without a linked folder everything falls back to IndexedDB exactly as before,
+   so drafts still work with zero setup. Folder drafts carry an 'fs:' id prefix,
+   which is how every operation below knows which backend it is talking to.
+   ============================================================ */
+let fsDir = null;                       // FileSystemDirectoryHandle for the projects root
+const FS_HANDLE_KEY = 'fs/projectDir';
+const fsSupported = () => typeof window.showDirectoryPicker === 'function';
+const isFsDraft = id => typeof id === 'string' && id.startsWith('fs:');
+
+async function fsPerm(handle, request){
+  if (!handle) return 'denied';
+  const opts = { mode:'readwrite' };
+  try {
+    let st = await handle.queryPermission(opts);
+    if (st !== 'granted' && request) st = await handle.requestPermission(opts);
+    return st;
+  } catch(e){ return 'denied'; }
+}
+
+/* Folder names must survive a round trip through the filesystem. */
+function safeName(n){
+  return (n || 'Untitled').replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/\.+$/,'').trim().slice(0,80) || 'Untitled';
+}
+
+async function linkProjectFolder(){
+  if (!fsSupported()){
+    // Brave ships the File System Access API with the PICKERS removed while
+    // keeping FileSystemHandle et al (its private filesystem needs them), so
+    // feature-detecting the interfaces is not enough — showDirectoryPicker is the
+    // thing that is missing, and it is behind a flag.
+    const brave = !!(navigator.brave);
+    toast(brave
+      ? 'Brave hides the folder picker by default. Enable brave://flags/#file-system-access-api and relaunch — drafts keep saving in the browser meanwhile.'
+      : 'This browser has no folder picker. Drafts still save in the browser.', true);
+    return;
+  }
+  try {
+    const dir = await window.showDirectoryPicker({ id:'meatcord-projects', mode:'readwrite' });
+    let same = false;
+    try { same = !!(fsDir && await fsDir.isSameEntry(dir)); } catch(e){}
+    const openFsDraft = isFsDraft(S.draftId);
+
+    // The open project's take files live in the OLD root. Carrying its metadata
+    // into a new root would describe files that aren't there, and copying the
+    // footage across instead could be gigabytes of silent writing — so close the
+    // session and leave the project where it already is, intact.
+    if (openFsDraft && !same && S.clips.length &&
+        !confirm('Switch to a different projects folder?\n\n"'+S.draftName+'" stays saved in the '+
+                 'current folder and closes here. Re-pick that folder any time to reopen it.')) return;
+
+    fsDir = dir;
+    window.__fsPending = null;
+    await blobPut(FS_HANDLE_KEY, dir);      // handles are structured-cloneable
+    if (openFsDraft && !same){
+      S.draftId=''; S.draftName=''; S.draftFolder=''; S.draftMediaFile='';
+      S.clips=[]; lastTimelineCount=-1; rebuildTimeline(); refreshClipDependentUI();
+      toast('Now using "'+dir.name+'". The previous project stayed in the old folder.');
+    } else {
+      toast('Projects folder linked: ' + dir.name);
+    }
+    updateDraftUI(); renderDraftList();
+  } catch(e){ /* picker dismissed */ }
+}
+async function restoreProjectFolder(){
+  if (!fsSupported()) return;
+  let handle = null;
+  try { handle = await blobGet(FS_HANDLE_KEY); } catch(e){}
+  if (!handle) return;
+  // Permission usually reverts to 'prompt' across browser restarts, and
+  // re-requesting needs a user gesture — so only adopt it if still granted, and
+  // otherwise surface a Reconnect button rather than failing silently later.
+  const st = await fsPerm(handle, false);
+  if (st === 'granted') fsDir = handle;
+  else window.__fsPending = handle;
+  updateDraftUI();
+}
+async function reconnectProjectFolder(){
+  const handle = window.__fsPending || (await blobGet(FS_HANDLE_KEY).catch(()=>null));
+  if (!handle){ return linkProjectFolder(); }
+  const st = await fsPerm(handle, true);     // called from a click, so this may prompt
+  if (st === 'granted'){ fsDir = handle; window.__fsPending = null;
+    toast('Reconnected: ' + handle.name); updateDraftUI(); renderDraftList(); }
+  else toast('Folder access denied.', true);
+}
+
+async function fsDraftDir(create){
+  if (!fsDir || !S.draftFolder) return null;
+  try { return await fsDir.getDirectoryHandle(S.draftFolder, { create: !!create }); }
+  catch(e){ return null; }
+}
+async function fsWrite(dir, name, data){
+  const fh = await dir.getFileHandle(name, { create:true });
+  const w = await fh.createWritable();
+  await w.write(data);
+  await w.close();
+}
+const takeFile = (blobKey, type) =>
+  'take-' + String(blobKey).replace(/^b/,'').padStart(2,'0') + (String(type||'').includes('webm') ? '.webm' : '.mp4');
+
+function newDraftId(){ return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+async function ensureDraft(){
+  if (S.draftId) return S.draftId;
+  S.draftName = S.draftName || ('Draft ' + new Date().toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}));
+  if (fsDir){
+    // Fix the folder name at creation. There is no rename in the FS API, and
+    // copying gigabytes to follow a title change is worse than a folder whose
+    // name is simply the one it was born with.
+    let base = safeName(S.draftName), name = base, n = 2;
+    for(;;){
+      try { await fsDir.getDirectoryHandle(name); name = base + ' ' + (n++); }
+      catch(e){ break; }                     // not found = free
+    }
+    S.draftFolder = name;
+    S.draftId = 'fs:' + name;
+    try { await fsDir.getDirectoryHandle(name, { create:true }); }
+    catch(e){ console.warn('could not create project folder', e); S.draftId=''; S.draftFolder=''; }
+    if (S.draftId){ if (lastImportFile) persistMedia(lastImportFile); updateDraftUI(); return S.draftId; }
+  }
+  S.draftId = newDraftId();
+  S.draftFolder = '';
+  // Ask the browser not to evict this data under storage pressure. Without it a
+  // draft can quietly disappear, which is the one thing a drafts feature must not do.
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch(e){}
+  // A background dropped BEFORE the first take predates this draft, but it is
+  // still part of the session, so adopt it now rather than losing it.
+  if (lastImportFile) persistMedia(lastImportFile);
+  updateDraftUI();
+  return S.draftId;
+}
+
+/* Called once per take. The blob never changes after this. */
+async function persistClipBlob(clip){
+  try {
+    const id = await ensureDraft();
+    if (isFsDraft(id)){
+      const dir = await fsDraftDir(true);
+      if (dir) await fsWrite(dir, takeFile(clip.blobKey, clip.blob.type), clip.blob);
+    } else {
+      await blobPut(id+'/'+clip.blobKey, clip.blob);
+    }
+    saveDraftNow();
+  } catch(e){ console.warn('draft: could not store take', e); toast('Could not save that take to the project folder.', true); }
+}
+/* Only drop a recording when no clip still points at it (split leaves two). */
+async function releaseClipBlob(clip){
+  if (!clip || !S.draftId || !clip.blobKey) return;
+  if (S.clips.some(c => c.blobKey === clip.blobKey)) return;
+  try {
+    if (isFsDraft(S.draftId)){
+      const dir = await fsDraftDir(false);
+      if (dir) await dir.removeEntry(takeFile(clip.blobKey, clip.blob && clip.blob.type)).catch(()=>{});
+    } else await blobDel(S.draftId+'/'+clip.blobKey);
+  } catch(e){}
+}
+
+async function persistMedia(file){
+  if (!S.draftId || !file) return;
+  try {
+    if (isFsDraft(S.draftId)){
+      const dir = await fsDraftDir(true);
+      const ext = (file.name && file.name.includes('.')) ? file.name.slice(file.name.lastIndexOf('.')) : '';
+      if (dir){ S.draftMediaFile = 'background'+ext; await fsWrite(dir, S.draftMediaFile, file); }
+    } else await blobPut(S.draftId+'/media', file);
+  } catch(e){}
+}
+
+let draftSaveT = 0;
+function saveDraftNow(){
+  if (!S.draftId) return;
+  clearTimeout(draftSaveT);
+  draftSaveT = setTimeout(async () => {
+    try {
+      const rec = {
+        id: S.draftId, name: S.draftName, updatedAt: Date.now(),
+        settings: draftSettings(),
+        clips: S.clips.map(clipMeta),
+        media: S.hasMedia ? { kind:S.mediaKind, file:S.draftMediaFile || null } : null,
+        nextClipId, nextBlobKey,
+      };
+      if (isFsDraft(S.draftId)){
+        const dir = await fsDraftDir(true);
+        if (dir) await fsWrite(dir, 'project.json', new Blob([JSON.stringify(rec, null, 2)], {type:'application/json'}));
+      } else await draftPut(rec);
+      updateDraftUI();
+    } catch(e){ console.warn('draft save failed', e); }
+  }, 400);
+}
+/* A blanket autosave beats hooking every mutation site — trims, speed, reorder,
+   every settings control. Metadata is a few KB, so the cost is irrelevant and no
+   call site can be forgotten. */
+setInterval(() => { if (S.draftId && !S.editOpen) saveDraftNow(); }, 4000);
+window.addEventListener('beforeunload', () => { if (S.draftId) saveDraftNow(); });
+
+/* Every project folder that actually contains a project.json. */
+async function fsListDrafts(){
+  if (!fsDir) return [];
+  const out = [];
+  try {
+    for await (const [name, handle] of fsDir.entries()){
+      if (handle.kind !== 'directory') continue;
+      try {
+        const fh = await handle.getFileHandle('project.json');
+        const rec = JSON.parse(await (await fh.getFile()).text());
+        rec.id = 'fs:' + name; rec.folder = name;
+        out.push(rec);
+      } catch(e){ /* not one of ours */ }
+    }
+  } catch(e){ console.warn('could not read projects folder', e); }
+  return out;
+}
+async function fsGetDraft(id){
+  if (!fsDir) return null;
+  const folder = id.slice(3);
+  try {
+    const dir = await fsDir.getDirectoryHandle(folder);
+    const rec = JSON.parse(await (await dir.getFileHandle('project.json')).getFile().then(f=>f.text()));
+    rec.id = id; rec.folder = folder;
+    return rec;
+  } catch(e){ return null; }
+}
+
+async function loadDraft(id){
+  if (S.recording){ toast('Stop recording first.'); return; }
+  const fs = isFsDraft(id);
+  const rec = fs ? await fsGetDraft(id) : await draftGet(id);
+  if (!rec){ toast('That draft is gone.', true); return; }
+  if (S.editOpen) closeEditor();
+
+  // settings first, so restored clips land in the right mode/frame
+  for (const k of DRAFT_KEYS) if (rec.settings && rec.settings[k] !== undefined) S[k] = rec.settings[k];
+
+  const dir = fs ? await fsDir.getDirectoryHandle(rec.folder).catch(()=>null) : null;
+  const clips = [];
+  let missing = 0;
+  for (const m of (rec.clips || [])){
+    let blob = null;
+    if (fs){
+      if (dir) blob = await dir.getFileHandle(takeFile(m.blobKey, m.blobType))
+                              .then(h => h.getFile()).catch(()=>null);
+    } else blob = await blobGet(id+'/'+m.blobKey);
+    // A recording deleted outside the app shouldn't take the whole draft down —
+    // load what's there and say how much was lost.
+    if (!blob){ missing++; continue; }
+    clips.push(Object.assign({}, m, { blob }));
+  }
+  S.clips = clips;
+  if (missing) toast(missing+' recording'+(missing>1?'s are':' is')+' missing from the project folder.', true);
+  nextClipId  = Math.max(rec.nextClipId  || 1, ...clips.map(c=>c.id+1), 1);
+  nextBlobKey = rec.nextBlobKey || (clips.length + 1);
+  S.draftId = id; S.draftName = rec.name || 'Draft';
+  S.draftFolder = fs ? rec.folder : '';
+  S.draftMediaFile = (rec.media && rec.media.file) || '';
+
+  // background media
+  let media = null;
+  if (fs){
+    if (dir && S.draftMediaFile)
+      media = await dir.getFileHandle(S.draftMediaFile).then(h=>h.getFile()).catch(()=>null);
+  } else media = await blobGet(id+'/media');
+  if (media) loadFile(media); else clearImport();
+
+  reflectSettingsUI();
+  setMode(S.mode);
+  applyOutputDims();
+  rebuildFilters();
+  lastTimelineCount = -1; rebuildTimeline();
+  refreshClipDependentUI();
+  probeHwEncoder();
+  updateDraftUI(); renderDraftList();
+  toast('Opened "'+S.draftName+'" — '+clips.length+' clip'+(clips.length===1?'':'s')+'.');
+}
+
+/* Push restored state back into the controls, which otherwise still show whatever
+   was selected before the draft was opened. */
+function reflectSettingsUI(){
+  const seg = (id, attr, val) => [...$(id).children].forEach(b => b.classList.toggle('on', b.dataset[attr] === String(val)));
+  seg('mode-seg','mode',S.mode); seg('ar-seg','ar',S.ar); seg('res-seg','res',S.res);
+  seg('rec-fps','rfps',S.recFps); seg('exp-fps','efps',S.expFps);
+  seg('exp-res','eres',S.expRes); seg('exp-bitrate','ebr',S.expBitrate);
+  seg('rec-bitrate','rbr',S.recBitrate);
+  $('fit-cover').classList.toggle('on', S.fit==='cover');
+  $('fit-contain').classList.toggle('on', S.fit==='contain');
+  $('mirror-btn').classList.toggle('on', S.mirror);
+  $('zoom').value = Math.round(S.camScale*100); $('zoom-val').textContent = S.camScale.toFixed(2)+'\u00d7';
+  $('micvol').value = Math.round(S.micVol*100); $('micvol-val').textContent = Math.round(S.micVol*100)+'%';
+  $('impvol').value = Math.round(S.importVol*100); $('impvol-val').textContent = Math.round(S.importVol*100)+'%';
+  $('pipsize').value = Math.round(S.pip.w*100); $('pipsize-val').textContent = Math.round(S.pip.w*100)+'%';
+  $('piprad').value = Math.round(S.pip.radius*100); $('piprad-val').textContent = Math.round(S.pip.radius*100)+'%';
+  [...$('pip-ar').children].forEach(b => b.classList.toggle('on', b.dataset.par === S.pip.ar));
+  setMediaFit(S.mediaFit);
+  $('filters').querySelectorAll('input[data-filter]').forEach(inp => {
+    const k = inp.dataset.filter; inp.value = S.f[k];
+    const v = S.f[k], lab = inp.closest('.field').querySelector('[data-fval]');
+    lab.textContent = k==='hue' ? v+'\u00b0' : (k==='brightness'||k==='contrast'||k==='saturate') ? (v-100>0?'+':'')+(v-100) : v;
+  });
+  if (micGain) micGain.gain.value = S.micVol;
+  if (importGain) importGain.gain.value = S.importVol;
+}
+
+async function deleteDraft(id){
+  const fs = isFsDraft(id);
+  const rec = fs ? await fsGetDraft(id) : await draftGet(id);
+  if (!rec) return;
+  const where = fs ? ('the folder "'+rec.folder+'" and everything in it') : 'it';
+  if (!confirm('Delete "'+(rec.name||'draft')+'" ('+((rec.clips||[]).length)+' clips)?\n\nThis removes '+where+'. It cannot be undone.')) return;
+  if (fs){
+    try { await fsDir.removeEntry(rec.folder, { recursive:true }); }
+    catch(e){ toast('Could not delete that folder.', true); return; }
+  } else {
+    for (const m of (rec.clips||[])) { try { await blobDel(id+'/'+m.blobKey); } catch(e){} }
+    try { await blobDel(id+'/media'); } catch(e){}
+    await draftDel(id);
+  }
+  if (id === S.draftId){ S.draftId=''; S.draftName=''; S.draftFolder=''; S.clips=[];
+    lastTimelineCount=-1; rebuildTimeline(); refreshClipDependentUI(); }
+  updateDraftUI(); renderDraftList();
+  toast('Draft deleted.');
+}
+
+function startNewDraft(){
+  if (S.recording){ toast('Stop recording first.'); return; }
+  if (S.clips.length && !confirm('Start a new draft? The current one stays saved.')) return;
+  if (S.editOpen) closeEditor();
+  S.draftId=''; S.draftName=''; S.draftFolder=''; S.draftMediaFile='';
+  S.clips=[]; lastTimelineCount=-1; rebuildTimeline(); refreshClipDependentUI();
+  updateDraftUI(); renderDraftList();
+  toast('New draft.');
+}
+
+function updateDraftUI(){
+  const st = $('fs-state'), btn = $('draft-folder');
+  if (st){
+    st.textContent = !fsSupported() ? (navigator.brave ? 'blocked by a Brave flag' : 'unsupported here')
+      : fsDir ? fsDir.name
+      : window.__fsPending ? 'needs reconnecting'
+      : 'not linked';
+  }
+  if (btn) btn.textContent = !fsSupported() ? 'Why is this off?'
+    : fsDir ? 'Change folder…'
+    : window.__fsPending ? 'Reconnect folder' : 'Choose folder…';
+  const bn = $('fs-brave-note');
+  if (bn) bn.style.display = (!fsSupported() && navigator.brave) ? 'block' : 'none';
+  const n = $('draft-name'); if (n) n.textContent = S.draftName || 'Unsaved — record to start a draft';
+  const inp = $('draft-name-input');
+  // don't fight the user mid-type
+  if (inp && document.activeElement !== inp) inp.value = S.draftName || '';
+  const dot = $('rail-draft-dot'); if (dot) dot.style.display = S.draftId ? '' : 'none';
+}
+
+const fmtBytes = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+' GB'
+                   : b >= 1048576 ? Math.round(b/1048576)+' MB' : Math.round(b/1024)+' KB';
+
+async function renderDraftList(){
+  const wrap = $('draft-list'); if (!wrap) return;
+  let all = [];
+  try {
+    const idbDrafts = (await draftAll()) || [];
+    idbDrafts.forEach(d => d.where = 'browser');
+    const fsDrafts = await fsListDrafts();
+    fsDrafts.forEach(d => d.where = 'folder');
+    all = fsDrafts.concat(idbDrafts);
+  } catch(e){ wrap.innerHTML = '<div class="media-info" style="margin:0">Storage unavailable.</div>'; return; }
+  all.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+  if (!all.length){ wrap.innerHTML = '<div class="media-info" style="margin:0">No saved drafts yet.</div>'; }
+  else {
+    wrap.innerHTML = all.map(d => {
+      const total = (d.clips||[]).reduce((a,c)=>a+((c.trimEnd-c.trimStart)/(c.speed||1)),0);
+      const when = new Date(d.updatedAt||0).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      return '<div class="draft-row'+(d.id===S.draftId?' on':'')+'" data-draft="'+d.id+'">'+
+        '<div class="draft-main"><b>'+(d.name||'Draft').replace(/</g,'&lt;')+'</b>'+
+        '<span>'+((d.clips||[]).length)+' clips · '+fmt(total)+' · '+when+
+        ' · '+(d.where==='folder' ? 'on disk' : 'in browser')+'</span></div>'+
+        '<button class="draft-x" data-del="'+d.id+'" title="Delete draft">✕</button></div>';
+    }).join('');
+  }
+  try {
+    const est = await navigator.storage.estimate();
+    const u = $('draft-usage');
+    if (u && est && est.usage != null) u.textContent = fmtBytes(est.usage)+' used of '+fmtBytes(est.quota||0)+' available';
+  } catch(e){}
+}
+
+/* ============================================================
    SMALL UI HELPERS
    ============================================================ */
 let toastT=0;
@@ -4581,7 +6033,11 @@ function setMode(mode){
   // clear mode-specific transient state on switch
   S.camPanX=0; S.camPanY=0;
   [...$('mode-seg').children].forEach(b => b.classList.toggle('on', b.dataset.mode===mode));
-  $('pip-panel').style.display = mode===MODES.PIP ? '' : 'none';
+  syncRailForMode();
+  // Mode is part of the encoder key (Normal encodes camera frames, canvas modes
+  // encode the canvas), so switching it invalidates the probe.
+  probeHwEncoder();
+  checkExportWarning();
   if (mode!==MODES.NORMAL && !S.hasMedia) toast('Import an image or video for '+(mode==='split'?'Split':'PiP')+' mode.');
 }
 
@@ -4599,8 +6055,18 @@ function checkExportWarning(){
   const upscaling  = RES[S.expRes] > RES[S.res];
   const big        = (S.res==='4K' || S.expRes==='4K') && total > WARN_4K_SECONDS;
 
+  // Software encoding a full-resolution canvas is THE cause of dropped frames in
+  // Split/PiP, so it outranks the quality advice below: nothing else matters if
+  // the take itself comes out choppy.
+  hwEnsureProbed();                       // any key change re-probes, from anywhere
+  const answerPending = hwProbe.pending || hwStale() || hwProbeQueued;
+  const softCanvas = S.mode !== MODES.NORMAL && !hwReady() && !answerPending;
+
   let msg = '';
-  if (camStarved) msg = 'Camera only delivers '+camVid.videoWidth+'×'+camShort+' — recording at '+S.res+
+  if (softCanvas) msg = 'Falling back to software VP8 for '+S.res+' at '+S.recFps+' fps ('+
+                        (hwProbe.reason || 'encoder unavailable')+') — this take will drop frames. '+
+                        'Try 30 fps, a lower Quality, or a lower capture bitrate.';
+  else if (camStarved) msg = 'Camera only delivers '+camVid.videoWidth+'×'+camShort+' — recording at '+S.res+
                         ' upscales it. All the CPU cost, none of the detail. Try '+
                         (camShort >= 1080 ? '1080p' : '720p')+'.';
   else if (fpsStarved) msg = 'Camera is only sending '+camFps+' fps — it can’t do '+S.recFps+
@@ -4614,13 +6080,19 @@ function checkExportWarning(){
                             'Raise Quality or drop Export to '+S.res+'.';
   else if (big) msg = 'Long 4K timeline — 1080p is smoother for clips over 2 min.';
   $('warn-pill').classList.toggle('show', !!msg && !S.editOpen);
-  if (msg) $('warn-pill').textContent = msg;
+  // Always write the text, even when hiding. Leaving the previous message in the
+  // DOM makes a hidden pill look like a live warning to anything inspecting it.
+  $('warn-pill').textContent = msg;
 
   const brNote = $('rec-note');
   if (brNote){
     const br = recordBitrateMbps();
     brNote.textContent = S.res+' · '+S.recFps+' fps · '+br+' Mbps'+(S.recBitrate==='auto'?' (auto)':'')+
-      ' · ~'+Math.round(br/8)+' MB per 10s of take';
+      ' · ~'+Math.round(br/8)+' MB per 10s of take'+
+      (S.mode !== MODES.NORMAL
+         ? (hwReady() ? (hwProbe.accel === 'prefer-hardware' ? ' · GPU encode' : ' · H.264 encode')
+                      : (answerPending ? ' · checking encoder…' : ' · software VP8'))
+         : '');
   }
 
   const n = S.clips.length;
@@ -4643,10 +6115,12 @@ function checkExportWarning(){
 $('mode-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setMode(b.dataset.mode); });
 $('ar-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   if (S.recording){ toast('Stop recording before changing the frame.'); return; }
-  S.ar=b.dataset.ar; [...$('ar-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); });
+  S.ar=b.dataset.ar; [...$('ar-seg').children].forEach(x=>x.classList.toggle('on',x===b));
+  applyOutputDims(); probeHwEncoder(); });
 $('res-seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   if (S.recording){ toast('Stop recording before changing quality.'); return; }
   S.res=b.dataset.res; [...$('res-seg').children].forEach(x=>x.classList.toggle('on',x===b)); applyOutputDims(); startCamera();
+  probeHwEncoder();
   // Otherwise raising Quality here has no effect on what you actually get out:
   // export renders from S.expRes, independent of capture, so a forgotten Export
   // chip would silently hold the file at its old size.
@@ -4693,6 +6167,46 @@ $('pip-ar').addEventListener('click', e => { const b=e.target.closest('button');
 $('micvol').addEventListener('input', e => { S.micVol=e.target.value/100; $('micvol-val').textContent=e.target.value+'%'; if(micGain)micGain.gain.value=S.micVol; });
 $('impvol').addEventListener('input', e => { S.importVol=e.target.value/100; $('impvol-val').textContent=e.target.value+'%'; if(importGain)importGain.gain.value=S.importVol; });
 
+/* Drop media anywhere on the preview.
+   The rail puts the Import panel one click away, and this is the step the take
+   loop repeats most (swap background, shoot, repeat) — so the drop target is the
+   thing you are already looking at rather than a panel you have to open. */
+(() => {
+  const st = $('stage'), overlay = $('canvas-drop');
+  let depth = 0;                       // dragenter/leave fire per child; count them
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  const done = () => { depth = 0; overlay.classList.remove('show'); };
+
+  st.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth++; overlay.classList.add('show');
+  });
+  st.addEventListener('dragover', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+  });
+  st.addEventListener('dragleave', e => {
+    if (!hasFiles(e)) return;
+    if (--depth <= 0) done();
+  });
+  st.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); done();
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    if (!/^(image|video)\//.test(f.type)){ toast('That file is not an image or video.', true); return; }
+    ensureAudio(); if (audioCtx.state === 'suspended') audioCtx.resume();
+    loadFile(f);
+    // Dropping media onto a Normal-mode preview has nowhere to go, so move to a
+    // mode that actually composites it rather than silently doing nothing.
+    if (S.mode === MODES.NORMAL) setMode(MODES.SPLIT);
+    toast(f.name + ' loaded as background.');
+  });
+  // A file dropped outside the stage would otherwise navigate the page away.
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('drop',     e => { if (hasFiles(e)) e.preventDefault(); });
+})();
+
 // import
 $('drop').addEventListener('click', () => $('file').click());
 $('file').addEventListener('change', e => { ensureAudio(); if(audioCtx.state==='suspended')audioCtx.resume(); loadFile(e.target.files[0]); });
@@ -4705,6 +6219,14 @@ $('imp-play').addEventListener('click', () => {
   else { importVid.pause(); S.importPlaying=false; }
   updateImpPlayBtn();
 });
+function setMediaFit(mode){
+  S.mediaFit = mode;
+  $('mediafit-fill').classList.toggle('on', mode === 'fill');
+  $('mediafit-fit').classList.toggle('on', mode === 'fit');
+  $('mediafit-val').textContent = mode === 'fit' ? 'whole frame, blurred fill' : 'crops to fill';
+}
+$('mediafit-fill').addEventListener('click', () => setMediaFit('fill'));
+$('mediafit-fit').addEventListener('click', () => setMediaFit('fit'));
 $('imp-clear').addEventListener('click', clearImport);
 $('scrub').addEventListener('pointerdown', e => {
   if (S.mediaKind!=='video') return;
@@ -4733,6 +6255,7 @@ $('rec-fps').addEventListener('click', e => { const b=e.target.closest('button')
   S.recFps = +b.dataset.rfps;
   [...$('rec-fps').children].forEach(x=>x.classList.toggle('on',x===b));
   startCamera();                     // re-request the camera at the new rate
+  probeHwEncoder();
   if (S.expFpsFollowsCapture && S.expFps !== S.recFps){ setExpFps(S.recFps); toast('Export frame rate matched to '+S.recFps+' fps.'); }
   checkExportWarning(); });
 $('exp-fps').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
@@ -4741,7 +6264,8 @@ $('exp-fps').addEventListener('click', e => { const b=e.target.closest('button')
 $('rec-bitrate').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   if (S.recording){ toast('Stop recording before changing capture bitrate.'); return; }
   S.recBitrate = b.dataset.rbr==='auto' ? 'auto' : +b.dataset.rbr;
-  [...$('rec-bitrate').children].forEach(x=>x.classList.toggle('on',x===b)); checkExportWarning(); });
+  [...$('rec-bitrate').children].forEach(x=>x.classList.toggle('on',x===b));
+  probeHwEncoder(); checkExportWarning(); });
 $('export-btn').addEventListener('click', () => exportAll(false));
 $('export-sep-btn').addEventListener('click', () => exportAll(true));
 $('modal-cancel').addEventListener('click', () => {
@@ -4750,8 +6274,106 @@ $('modal-cancel').addEventListener('click', () => {
   $('modal-cancel').disabled = true;
 });
 
-// panels collapse
-document.querySelectorAll('[data-panel] .panel-h').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed')));
+// drafts
+/* Reconnect is only for a handle we already have whose permission lapsed. Once a
+   folder is actively linked, the button must open the picker — otherwise
+   "Change folder" silently re-grants the SAME folder and you can never move. */
+$('draft-folder').addEventListener('click', () =>
+  (!fsDir && window.__fsPending) ? reconnectProjectFolder() : linkProjectFolder());
+$('draft-new').addEventListener('click', startNewDraft);
+$('draft-save').addEventListener('click', () => {
+  if (!S.clips.length && !S.draftId){ toast('Nothing to save yet — record a take first.'); return; }
+  ensureDraft().then(() => { saveDraftNow(); renderDraftList(); toast('Draft saved.'); });
+});
+$('draft-name-input').addEventListener('input', e => {
+  S.draftName = e.target.value.trim() || S.draftName;
+  if (S.draftId){ saveDraftNow(); }
+  updateDraftUI();
+});
+$('draft-list').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del){ e.stopPropagation(); deleteDraft(del.dataset.del); return; }
+  const row = e.target.closest('[data-draft]');
+  if (row && row.dataset.draft !== S.draftId) loadDraft(row.dataset.draft);
+});
+
+// OBS bridge — control only; the camera image arrives via the Virtual Camera
+$('obs-connect').addEventListener('click', async () => {
+  const url = $('obs-url').value.trim() || 'ws://127.0.0.1:4455';
+  $('obs-dot').className = 'obs-dot busy'; $('obs-status').textContent = 'connecting…';
+  $('obs-connect').disabled = true;
+  try {
+    await obsConnect(url, $('obs-pass').value);
+    await obsLoadScenes();
+    obsReflectStatus(); obsSaveSettings();
+    toast('Connected to OBS — '+OBS.scenes.length+' scenes.');
+  } catch(e){
+    $('obs-dot').className = 'obs-dot err'; $('obs-status').textContent = 'failed';
+    $('obs-connect').disabled = false;
+    toast(e.message, true);
+  }
+});
+$('obs-disconnect').addEventListener('click', () => { if (OBS.ws) try { OBS.ws.close(); } catch(e){} });
+$('obs-url').addEventListener('change', obsSaveSettings);
+
+// microphone
+$('mic-device').addEventListener('change', e => {
+  if (S.recording){ toast('Stop recording before switching microphone.'); $('mic-device').value = S.micDeviceId; return; }
+  S.micDeviceId = e.target.value;
+  obsSaveSettings();
+  // Audio and video are opened together in one getUserMedia call, so switching
+  // the mic means re-opening both. That is what keeps Normal mode's two tracks
+  // on a single capture clock.
+  startCamera();
+});
+
+// video source
+$('cam-device').addEventListener('change', e => {
+  if (S.recording){ toast('Stop recording before switching camera.'); $('cam-device').value = S.camDeviceId; return; }
+  S.camDeviceId = e.target.value;
+  obsSaveSettings();
+  startCamera();                    // re-open on the newly chosen device
+});
+// The OBS Virtual Camera appears and disappears as it's started/stopped in OBS,
+// so the list has to track that rather than being read once at boot.
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener){
+  navigator.mediaDevices.addEventListener('devicechange', () => refreshDevices());
+}
+
+/* ============================================================
+   PANEL RAIL
+   One panel at a time, floating over the preview. Clicking the active icon
+   closes it, so the stage goes back to full width without hunting for an X.
+   The panels themselves are untouched — same markup, same ids, same handlers.
+   ============================================================ */
+$('side').classList.add('flyout');
+let openPanel = '';
+function showPanel(name){
+  openPanel = (name === openPanel) ? '' : name;      // same icon again = close
+  $('side').classList.toggle('open', !!openPanel);
+  document.querySelectorAll('[data-rail]').forEach(sec =>
+    sec.classList.toggle('active', sec.dataset.rail === openPanel));
+  document.querySelectorAll('[data-panel-btn]').forEach(b =>
+    b.classList.toggle('on', b.dataset.panelBtn === openPanel));
+  invalidateRect();
+}
+document.querySelectorAll('[data-panel-btn]').forEach(b =>
+  b.addEventListener('click', () => showPanel(b.dataset.panelBtn)));
+
+/* PiP layout only means something in PiP mode; hide its icon elsewhere and
+   close the flyout if that's what was open. */
+function syncRailForMode(){
+  const btn = document.querySelector('[data-panel-btn="pip"]');
+  if (!btn) return;
+  const show = S.mode === MODES.PIP;
+  btn.hidden = !show;
+  if (!show && openPanel === 'pip') showPanel('pip');
+}
+
+// Escape closes the flyout before anything else claims the key.
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && openPanel && !S.editOpen){ e.stopPropagation(); showPanel(openPanel); }
+}, true);
 
 // controls
 $('rec-btn').addEventListener('click', toggleRecording);
@@ -4804,13 +6426,38 @@ window.addEventListener('keydown', e => {
 applyOutputDims();
 rebuildFilters();
 updateImpPlayBtn();
+obsLoadSettings();
+obsReflectStatus();
+refreshDevices();
+probeHwEncoder();
 setMode(MODES.NORMAL);
+syncRailForMode();
+restoreProjectFolder().then(() => renderDraftList()).catch(()=>{});
+updateDraftUI();
+renderDraftList();
+/* Deliberately does NOT auto-open the last draft. Silently loading twenty old
+   takes into a session you opened to shoot something new is worse than one
+   click — so say it's there and let the choice be explicit. */
+Promise.all([draftAll().catch(()=>[]), restoreProjectFolder().then(fsListDrafts).catch(()=>[])])
+  .then(([a, b]) => {
+    const all = (a||[]).concat(b||[]);
+    if (!all.length) return;
+    const last = all.sort((x,y)=>(y.updatedAt||0)-(x.updatedAt||0))[0];
+    if ((last.clips||[]).length) toast('Draft "'+last.name+'" has '+last.clips.length+' clips — open it from Drafts.');
+  }).catch(()=>{});
 checkExportWarning();
 startRenderLoop();
 startCamera();
 
 // expose a tiny bit for debugging in console
-window.__meatcord = { S, get clips(){ return S.clips; } };
+window.__meatcord = {
+  S, get clips(){ return S.clips; }, OBS, obsRequest,
+  get hwProbe(){ return hwProbe; }, get hwRec(){ return hwRec; }, probeHwEncoder, hwKey,
+  hwStartRecording, hwCaptureFrame, hwStopRecording, ensureAudio,
+  get profile(){ return Object.assign({ measuredFps }, profAvg); },
+  addClip, loadDraft, startNewDraft, draftAll, draftGet, saveDraftNow, renderDraftList,
+  linkProjectFolder, fsListDrafts, deleteDraft, get fsDir(){ return fsDir; }, set fsDir(d){ fsDir = d; },
+};
 
 });
 </script>

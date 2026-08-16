@@ -1,0 +1,8 @@
+# Recorded takes and saved projects — never commit footage
+Drafts/
+*.mp4
+*.webm
+*.mkv
+
+# Local scratch
+upload/
