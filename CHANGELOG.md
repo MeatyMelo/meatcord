@@ -70,6 +70,13 @@ checked against the 1.2 download rather than assumed.
   milliseconds per frame at full resolution. Measured overhead: **0.034 ms/frame**
   of a 33.3 ms budget.
 
+- **Swap media and camera in PiP.** A button in the PiP panel flips which source
+  is the backdrop and which sits in the box, so the same layout gives you either
+  "clip behind, face in the corner" or "face behind, clip in the corner". With
+  aspect set to Auto the box follows whichever source is now inside it, and when
+  the camera is the backdrop, dragging it pans the camera the way Normal mode
+  does. Saved with the draft.
+
 - **Microphone picker.** Choose the audio input device, in the Audio panel. Both
   pickers fall back to the system default if a saved device is gone (unplugged, or
   an OBS Virtual Camera that isn't running) rather than silently selecting some

@@ -643,6 +643,10 @@
         <button class="panel-h">PiP layout <span class="chev">▾</span></button>
         <div class="panel-body">
           <div class="field">
+            <label>Layers <span class="val" id="pipswap-val">media behind</span></label>
+            <button class="btn" id="pipswap">⇄ Swap media ↔ camera</button>
+          </div>
+          <div class="field">
             <label>Size <span class="val" id="pipsize-val">30%</span></label>
             <input type="range" id="pipsize" min="10" max="65" value="30">
           </div>
@@ -669,7 +673,7 @@
               <button class="chip" data-par="4:3">4:3</button>
             </div>
           </div>
-          <div class="field" style="color:var(--text-faint);font-size:11.5px">Drag the PiP box to move it. Drag its bottom-right corner to resize.</div>
+          <div class="field" style="color:var(--text-faint);font-size:11.5px">Drag the PiP box to move it, its bottom-right corner to resize. Swapped, dragging the backdrop pans the camera.</div>
         </div>
       </section>
 
@@ -2829,6 +2833,8 @@ const S = {
   splitBotPanX:0, splitBotPanY:0,
 
   pip: { x:0.05, y:0.05, w:0.30, ar:'auto', radius:0.12 },
+  pipSwap:false,                     // false = media behind, camera in the box
+                                     // true  = camera behind, media in the box
 
   hasMedia:false, mediaKind:null,    // 'image' | 'video'
   mediaFit:'fill',                   // 'fill' = cover-crop (original behaviour)
@@ -3403,11 +3409,24 @@ function drawPipShadow(box){
 }
 function draw_pip(){
   const { w, h } = canvasDims;
-  drawMedia(0, 0, w, h, 0, 0);                  // imported fills canvas
   const box = pipBox();
-  drawPipShadow(box);
-  // cover-cropped cam, pannable inside its box
-  drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r, panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
+  if (S.pipSwap){
+    // camera behind, imported media in the box. Camera pan/zoom now act on the
+    // full frame, which is what dragging the background should feel like.
+    drawCam(0, 0, w, h, { panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
+    drawPipShadow(box);
+    // drawMedia has no radius of its own, so clip to the rounded box around it
+    ctx.save();
+    roundRectPath(ctx, box.x, box.y, box.w, box.h, box.r);
+    ctx.clip();
+    drawMedia(box.x, box.y, box.w, box.h, 0, 0);
+    ctx.restore();
+  } else {
+    drawMedia(0, 0, w, h, 0, 0);                  // imported fills canvas
+    drawPipShadow(box);
+    // cover-cropped cam, pannable inside its box
+    drawCam(box.x, box.y, box.w, box.h, { fit:'cover', radius:box.r, panX:S.camPanX, panY:S.camPanY, scale:S.camScale });
+  }
 }
 
 /* compute pip box in canvas px from normalized state */
@@ -3416,7 +3435,15 @@ function pipBoxAt(nx, ny){
   const boxW = w * S.pip.w;
   let boxAR;
   if (S.pip.ar === 'auto'){
-    const cw = camVid.videoWidth || 16, ch = camVid.videoHeight || 9;
+    // 'auto' means "match the source in the box" — and swapping changes what
+    // that source is, so the box would otherwise take the camera's shape while
+    // holding a differently-shaped video.
+    let cw, ch;
+    if (S.pipSwap && S.hasMedia){
+      if (S.mediaKind === 'image' && importImg){ cw = importImg.naturalWidth; ch = importImg.naturalHeight; }
+      else { cw = importVid.videoWidth; ch = importVid.videoHeight; }
+    }
+    if (!cw || !ch){ cw = camVid.videoWidth || 16; ch = camVid.videoHeight || 9; }
     boxAR = cw/ch;
   } else {
     const [a,b] = S.pip.ar.split(':').map(Number); boxAR = a/b;
@@ -4362,6 +4389,9 @@ canvas.addEventListener('pointerdown', e => {
       drag = { type:'pip-resize' };
     } else if (px >= box.x && px <= box.x+box.w && py >= box.y && py <= box.y+box.h){
       drag = { type:'pip-move', dx:(px-box.x)/canvasDims.w, dy:(py-box.y)/canvasDims.h };
+    } else if (S.pipSwap){
+      // the camera is the backdrop now, so dragging the backdrop pans it
+      drag = { type:'cam-pan', startX:p.x, startY:p.y, ox:S.camPanX, oy:S.camPanY };
     } else {
       drag = null;
     }
@@ -5613,7 +5643,7 @@ const blobDel   = k   => idbDo(ST_BLOBS, 'readwrite', st => st.delete(k));
    storage and restore the app into a state it was never in. */
 const DRAFT_KEYS = ['mode','ar','res','recFps','expFps','recBitrate','expRes','expBitrate',
   'mirror','fit','camScale','camPanX','camPanY','f','splitDivider','splitTopPanX','splitTopPanY',
-  'splitBotPanX','splitBotPanY','pip','mediaFit','micVol','importVol'];
+  'splitBotPanX','splitBotPanY','pip','pipSwap','mediaFit','micVol','importVol'];
 
 function draftSettings(){
   const o = {};
@@ -5930,6 +5960,7 @@ function reflectSettingsUI(){
   $('pipsize').value = Math.round(S.pip.w*100); $('pipsize-val').textContent = Math.round(S.pip.w*100)+'%';
   $('piprad').value = Math.round(S.pip.radius*100); $('piprad-val').textContent = Math.round(S.pip.radius*100)+'%';
   [...$('pip-ar').children].forEach(b => b.classList.toggle('on', b.dataset.par === S.pip.ar));
+  setPipSwap(S.pipSwap);
   setMediaFit(S.mediaFit);
   $('filters').querySelectorAll('input[data-filter]').forEach(inp => {
     const k = inp.dataset.filter; inp.value = S.f[k];
@@ -6159,6 +6190,15 @@ $('filters-reset').addEventListener('click', () => {
 });
 
 // pip layout
+function setPipSwap(on){
+  S.pipSwap = !!on;
+  $('pipswap').classList.toggle('on', S.pipSwap);
+  $('pipswap-val').textContent = S.pipSwap ? 'camera behind' : 'media behind';
+}
+$('pipswap').addEventListener('click', () => {
+  setPipSwap(!S.pipSwap);
+  if (S.pipSwap && !S.hasMedia) toast('Nothing in the box yet — drop an image or video on the preview.');
+});
 $('pipsize').addEventListener('input', e => { S.pip.w=e.target.value/100; $('pipsize-val').textContent=e.target.value+'%'; });
 $('piprad').addEventListener('input', e => { S.pip.radius=e.target.value/100; $('piprad-val').textContent=e.target.value+'%'; });
 $('pip-snap').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
