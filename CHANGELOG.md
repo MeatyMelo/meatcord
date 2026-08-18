@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+Landed on `main` but not in a release yet.
+
+### Added
+
+- **Swap media and camera in PiP.** A button in the PiP panel flips which source
+  is the backdrop and which sits in the box, so the same layout gives you either
+  "clip behind, face in the corner" or "face behind, clip in the corner". With
+  aspect set to Auto the box follows whichever source is now inside it, and when
+  the camera is the backdrop, dragging it pans the camera the way Normal mode
+  does. Saved with the draft.
+
+### Fixed
+
+- **Layout stretched off screen as the timeline filled.** `.app` is a grid with
+  `grid-template-rows` but no `grid-template-columns`, so the single implicit
+  column was auto-sized and grew to fit its widest child. Once the merged footer's
+  clip pills exceeded the viewport, the column widened and dragged the topbar,
+  stage and controls with it. Pinned with `minmax(0,1fr)`, plus `min-width:0` on
+  the flex rows since grid and flex items both default to `min-width:auto`.
+  Measured at a 1879px viewport: 14 clips grew the layout to 2117px before, and it
+  holds at 1879px with 40 clips after. *(The fix is in the 1.3 download — the
+  asset was replaced after release.)*
+
 ## v1.3.0 — Compact UI, drafts on disk, microphone picker
 
 Builds on 1.2. Everything below is new since that release; membership was
@@ -69,13 +94,6 @@ checked against the 1.2 download rather than assumed.
   the smoothing; a `ctx.filter` blur works in destination space and would cost real
   milliseconds per frame at full resolution. Measured overhead: **0.034 ms/frame**
   of a 33.3 ms budget.
-
-- **Swap media and camera in PiP.** A button in the PiP panel flips which source
-  is the backdrop and which sits in the box, so the same layout gives you either
-  "clip behind, face in the corner" or "face behind, clip in the corner". With
-  aspect set to Auto the box follows whichever source is now inside it, and when
-  the camera is the backdrop, dragging it pans the camera the way Normal mode
-  does. Saved with the draft.
 
 - **Microphone picker.** Choose the audio input device, in the Audio panel. Both
   pickers fall back to the system default if a saved device is gone (unplugged, or
