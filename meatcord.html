@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Meatcord — Recorder</title>
+<!-- The app is one self-contained file, so the mark is inlined rather than
+     linked. This is the ONLY copy of the image data: the topbar logo reads
+     its src back off this link instead of embedding a second 12KB. -->
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAQAElEQVR4AcR6CZhcVZn2e8/dau3qrXpLp5cknXQSsnQIhCV7hARiWMOw/qw+v/qLDv4qDrgMOOOo4zYuiKICCr+ACKNgUAIRIoGQhZCVJL2k97W6umvp2u/yv6difHR0xuAIc3NPV9WtU/ec7/3e7/2+c24E3oXjo+ee6/3Mua0L7j1/4W3/tGLhY19YvfCtz69aFP/C6sX5f1nTNv6FNW17v7huyXfvXXvmVfesXjLrntWrtXdhWsUh3mkAlM+eP/vqkDX2ou46L6mK/YNQRdk1s89cMnfZRRtKlm3apJ+1fn1Fy5ltZ/pDofd7VfUxU3FfMpT4E5+/8LwzijN8h/+8IwDcsXpx6aeWNG+6s635FTeTe6w8XHZe2+rzK675xB246sMfxILlK9G6fBWWX38LVv/v23HZ3ffiA9/5Hjbfdbe6cM3a+sq62it05Pf/87q2z95z0bKSdxKDvzkAd5/dcp0vNvES7PwTQZ9x/sXXXaps/uBNCFeFse9XL+DN37yMRGQYR1/aipce+CZevu9rePn+b2DvUz8FrALW3fZ+XHbnpzB/+QrVY3g+Y+atLf988XmN7xQIf1MA7loxb14hnXkwVBZafOHVl3g/8Nk7wM947kc/Q3RkCEsvWIZzL1qBmfObEK4rx+jh4yibiKM0loB9ohftW7Zg69e+hOFDe7Hyysux/qYbtVBF+XItn/+51IZ3AoT/NgB3rViw6q4VbWE5OSWZvgGOa06b2YjZZ8zGk9/4AaAJXPL+v8NZa5fCZ9jITQ7BySXRf6wDoUwGgckYSrJpTPOZmB0IoFU3MfrqLmz97gMI11bi4ltvgsc0FwnHevaeTasr5TinWnl5eQnbOaFQ6ILKUGjprFmz3na4iFM3ezuvd53dWvHxxY3X3bmw4aATm3y5EI/23rV0xsW2iyurqssQ6R/EMD3q8fuwcMVS2Kkk7GwGrm1DCAWT4xMYfvMwmrwaoFrw1IbhbWiEd3odDNXFLL8XnlQaLzz8KDxKFqsvX6/oitIqomNfmlVTEzYM4zpVVV+IxWJjqVRqZ76Q35rIZPacOHEiwuvbPB79fR6Pp/l0bHrbAHxyyawbCunkDhQKD5qGsWDdFevh1VUvcoXHHKswu7I8iAXzZyAZTyCZTDGs85yHCyg8VQE1GMQz9z+O6bwghAs95EFhYhSp4/uR6T4GuDnYmSQmR4Yx1N2Pp+57GDU1IcxfMgdDyalre8fGXrVt66HWua3vue6668zbbr0VN990M26+5WZcc/XVxqLFi9Y6jvLdXC73smmaH8ZfOE4LgI+eW+/9vwsbr/zo/Gk76MlH6pumt77nig3m5ts2w6NruPzWqzD/rAUlgVAQJWUlqJpeAwgVlXVVUBy7OAUXLjSfB9t/9jzCuQKqfF6YlaW8qsB1HDjsRwCpnVkkJycwOhGFz8mhNJfDlieew67JDB4+OuCtrqtruf6GG4wN6zfA5/MhHo9jcnISceqIqmk4+6yzccMNN6htbW0NQohv6Lr+uMfjaSxO4s/8+YsAfLRtxlIlgZ2ikH/UY+jnbX7/dVj93nXo3v8W9r2yG3qARj31K1I8iytuuQJnrV8JeLw48uobWHv9JTQow2EdKAoNNT0YeOMI5oXLYJT4IHSNHudJgrAT4LjsX0CUupDKZhHUVFSHAvjs09vxxR9vQVVdPa6//nqYponBwSHEyTKb4I2MjOD48WPo6OjA8PAw0qkM5rbOw+bNmxVNU6/K5/O/APBn9eE/BeDOtjl1H1/Q8EU3m9leWhZatPKSCz3XfOhmpefwMRzcuQfLr1yPy//PtZizqAW3fv4jmLFkHg7v2ocXn9qKg3uOYOV174XH0GBl83AY+yapf+JAB2o0HQp1QKc+wCUv6HnQCNlc10GGnoxTHA1VwfahCVz+8x3QwzWorqnBhRdcgImJCcQIUJ7MOH78OJ7f+jwOHz6MsbEx9PT0YPv27dj5+mvo7euBZVnYfOVmUVFevohs2O71eqcTiD86/ywAd56/cI5iZbdpjvWJc9ac73vf3R9CciyC13+5FWdeuBwX3bAJ4Qo/MuNR5OiFNL+bc0YzLuT1yz50LS76X+9FuNSLNFOfY9lw2VSCMXT8BMq9HnAygALYnKD83ilYOPlaQCGdxvBUClsGYni8O4KzWDDNmtWCpUuXIhgsQZRjFth/586dGBoaQFlpGUKhEGgc/MwiFRUVUFUVEoxdu3YhQzDXrFkLTdMWUju+gP9wiP/wGXcvm3uBmk5tL6+qbL3qjg+I1iWL8Oz3/x/qZtbjyg/fgKBXoDCV4ITzdGABLj3o0pDC1BSykQgypGCW3iikM3Bsi8azDwscOU6BbDhlvFMoMGzysOlJO58rvhbSWaSyOTw3EMW+eA4rV69BQ0M9Jun1eXPnYpT3tcgmSfWso8FXMw+iaiFE5QI4wSZYwk9NERCqgMfjAamPXbt3I8tw2rhxoxBCvc409Q9xLgpb8fwjAD55/pkNBpyfhqsqq268++8ZawZee+bXuOSDN2BuWwu9PQ4nx5jmz41gAL7qKpQ0NyE0axZCM5rhr62BTnFzHYvuLQD0vCubBMJ2oDO95fhejuzm83BpuHx1+N7J5YveP84UuW1sCkuXLUNNTTU8Xh9sgpzj91LwHIZL33AE0xZsQHnzcgRrFiFYtxDhlpWobbscKJsFy1WhKAo8BEGy4eixo3JIzJgxQ8nnrbuoIS3FC/zzewA+eeaMkFpIPlxeU136d5+6W6mY3ohjew+iobUJulqAytg1gyHkhY5oPIPDe49i2+PP4/Ev/RCP3nsfnvjyg3jtuR0YGk/C1zgdZkU5w9oussAhQ7KTUcxeOhcT9LCiKLBJY4fgyCZBcmQfMuTHXaMoC1ehobEJwZJSCl0cdbV1iEajzLx59PX1orS+Dbo3DM0wsPiMmXjPyqVYvfxMzGudjabF6xFoOg95lwLLcTRdQyKRQFfXCbS0zJaZo9Z13etpe/H8PQCm7l1p6saKtg0XoWbOQowPDKPncDsOvrQXP/nyI/jZfU/ge5/6Jn507/144ds/QWTra6juGYY2MIahjh7UT6Wh7z+Gbfc9jvs/9hVMJPMo54QUxSEIBaTGRlHXPB3jKofkxFx6khPBqSYBGGMIHImnMXvOHNTU1mLatHoIoRVjXHpfKn4Pha4kPAMQKqoqQihhNrEVAYMZZhbD9OI1S9E4bxnKZq8hEwQU/gsGgxgcHEBqagpMj8KyCneEw+GAREDIP2yckvPp2qZGbemmK2HFBrHt4cewlAuYS+bMxjxFQ3Mmj2VlpdjQMA2rG+rQUlqKgK5hlKLlNTTUMCSmlfixfkY9zi0vx4v/9ghe+cXLCDQ2QlD16T5khvrpoVYcHB6D4IjKqfQHYKrg4N/7IpiyHCxpW4rGhmZMn96Aiei49BpyDBeb8S9FzRsohe4xYSsq+scm0DcaRQ9fx2JpTAuX4LK1bahqmAszPJuaACiKQqBKMMziyu9n6Pr8Jclk8mPgUQTgE+ctXuRY9tlnXrQROmNu/9ZtSPUNos7nK4pYmd9EOYuY8rIQ474CvqZpEIznwfgU8pxUU201fOWl8MyeA50gVfl9WDmtCu2/fhW7XtyF8IIFUFQVmWgE5110LronE0jlGVacnoCCgWQGVz+/Fz/qGEQT9WTBwkXQdQMjFNTRsRG+14ifBYvC6bgCpq+E8W1C0QyaAOQZPgnm/p6RcRzsHoWh61h19lxUNC1BwdWhKAqvGcUwcqgnMmtks7mr6uvrKenyFpnklSaNrZk9D7nEOA7v2ImZ5WVMUwUE5rcifO75KGmZAa0sCOExINNWNpPDGxzQpPfPILURCMGorIW/9QwEWudAowCtbq5H5/O78NqWVxFsnFEE005M4j03bUJPLMmJCXTFU7j1pQMomzELa1avQbiyGtHxcXR3d6GzswMZZpMcRRIESwog4EDnHBRNoL9zH+KjXUgMtUPLjFN08zjaM4o3CaTC/lW19fCEWyBUDRrZKoTAFLNVOByGAlSydmgW93D7iQat9pWG4A+FkBg4gVR0AvWhEiihALx1DYh1HiUwE3AZt2QKbIrVwHgMNicTZunrIQjWVBzJrrcw1XuCqs1JUsE5COZXlmHHUy9gqH8MJfXTMTU6ipaFczDh9WIincPn9hyHXlGJs1jC+pnHs1w09fScQC/b4GA/GK9IUsSkn6ReCN5UM1SMD3eQFQUkpjLwMPM014cR9lhQ2KFrMIq3CITCwqq65SwoZIppGigvLysWTGVlZYTHLSeg00Uq1VNJdoZNFiiaqSM1EYGgQqvsIgJ+JPq6YOXSFDKHALh8tRFjvPUmk/D7dUwPV0CyweFgMu87Vg75xAQsxqyc8ChXdQXG9zPffxoZW4NZVo706ACM+ircufMIDkXjWLVyNZqam9HIuJcxLpV+hPE6Ph7hLNxi/lcUBXKMkpIg4mPdUOhN3etHzlWQ5v07+4cxMDQMayrKkNExRUHNZbLw+EthBio41wCqqqrB2IdKgw3D0PnaIrIpp5wTLROklCoUFLIp6BxW5t48l7GJwT56wWaz4DC/ZxhryVQWo5k0NEVFDVElkvyO4EiGMN/bspG2Fl+5goPPVDEz6MfT3/wJjGA5frFlJ/7+wedwOOeivqkZc+cxbAIhpCmo8XgMUQpfMpkoFjDBQBBc5vL+Jx0QKi1FcnwAQjfho7pzQwAFEnqS81INA/mpiSIAmtAZwoAqBAx/WbGKDAZLivfJc25+vx+2bTcK1bFDlu2GCnkLsjRVICCFzZELE9mYqwsULOt3LcnY3TUwgiDjcEZdNXQOYLOPTFHyN47rkikOLMZukr+J8b5lFMXF1IMZnPy/fflRfPrpXWhunYfVq1ehpqYWsdgkjh09QkNP0lpOUIJIP0A2OgjyjXwt5T1S433weghAwItgeQlC4VJqjokEM1U6b5MdNB4GLRGcnwpV88Dn8xcbeFgUTZ1CKYSoFFkodVbBMgNeA3l6wENkcqSzTXUH6UUMWLTYkAClqNbDsSmk7QJ8ho4lc2YiycWLvKHNm0p9cMgCl61ACh4enYAgq5pqquCpmY6Ghgb8cl87FF8AixYvRsvsVghVoLOjHV0UvHGKX3IqCWLIaSpw5T8XEEIgQzoLVZU4oJAYQaisEhqN0DQBj9dD/fLD8Oqgy2F4fNA0ExpZoqk6dE1lVWvCMMht3lzOEScP/hpuk6DBTTOmYWp8FAEKkkoqDSWS3MnJwhUa6GDW1TYyFK3B5BRKfCZqmRKjzAIpbnrkWd0VGULDpfEOwYsyRXYTnMqgH021NfBW1uFnO/ZiKFvA2WcvQ1PTTFI8h3gsRmEaRZzreul12TJ0hMs50X44rg2T3h4cHKRtQl5CKODFoRcfhdcfgsswk2Ny8QiNYlzTOBuG6YVOcFRNg8Hf6sIpfk7QJsMwIAHIcQ3ium5UaLZdJeO9rr4akRPHUMKYrqgpxwA3DNzRVQAAEABJREFUGdxUit5QqPWA9HKW4hilZ3kR1RSjyNAYNSOHHK8VmBls1usOmZCl8T2TcQR8BuoqSqFRrNJU973dA8iQUrOY6/v7+nD0yGFMTkwWY19OShWC+VovguGwn2ShDC3DMAnSGOQS2OV1D1OsxWItcuII/MEwWaFwSgKllfWoaWDaE6AquEXADEOhpuUZFgqGhwepBUGC6IJi65JZ/cIGghop4g/5cYzLR7eQwfJL1iCaSSHLwsPl0pS3Ap2K4+Mx3kignOlKd1BE0mKMWzQ8TxYUKC4Fvs8w/kcoSgFTR1WIwgMNfdzAUBQgTwO6ujpxoqsDE9z5mUpN4eShFKnOTU7EyAapAxZFVwIvWVFVXYMBskCnlx2yo7q6Gt27thS1Jlw9B7UNC1BZMxNM6XDpBJdhqntNdB/ZidKgyflbxWwiwcsynPIFehM4LoSiqIACGQx+j4aOfftRN6MBDfNmYj/TChnCWReQzvEGst5XBBY11TOdZACh8qcKHMth2rOoE3lkmSEizM05ImYIgaBhIkdQImQUiL3CFmWsp9Ip+RGKUKQ3WDvY/MYl3T28BrIiBZuxV2QBV5DSSZw0QzEPlVrAUEaIofjM127HGJngcg42nWCxQLMYQo6VRzzaj3zkOPzUt/7+Pt7PIlNcxGIxcPBJhkC3sCx7KlfIE7kC5i5swaEdu5DjJsKyC5ZikgP3SSrrBhLcx5ODhkNBpOJZuJpZ1AdXEAQa6tgurJyNPGN8R/8ITLJqfmM9BdRCVu4fEGSXomooClJkFa0tTiZcWQW5pWXRa7Lx6yJNR1kwWQTRoa44v4tzP5W8s6OThtiQ/YQq0NzciNef/Ap2Pv0dxIb6kGUaTcWi6O94A9mhvWhtnoZ9b7zBLHMMATJXsmeSzlCF2kmWdQpXKNECU0eaBYuTz6LEr+EtbnnJjc3lG87BCS5D06T2BEEhbKgOBuAYHgjDhCJ0TkSFqxSDDnKi/UyTZChMXUPL9FpkGQo5eiRH7/h1FR6qVSwRZ1+76HVd03gPhYKYKRrmMkQ8Hi+EEIhy98chCPQUeJnjCYRKQhgYYB3A74lg8belAR8ix17Bs9/+CH794Kew/adfhDW8F87UGLZu/TUBHkYoRMF03SJLWW9YhmF8hfbkhOPY3WQhoqzu8ixuykpNHNi5H32d/ViyeinmrViE33b3IkKvlTGmyqXxmg6N3hBcgiqawYmdBMEmCwYogCYn11hVib7uIRqWQ57gZRkWtawCKwiC3NfLEtQCNaZA9vmZeqVXbMa89LjCmZVzayvD+WRPqjVcMoF/oOkadF1Hb28vewEK/7lEPMi9iupwOUwkoVpx9Pe0s67oYgXo50rwpPGyX29vH4QmnslkMs+Ah1Btp0eoSm6wb4gfSWM+pTnznHl446XdSCWmuHo7B43zm0BGoybgh0bxsydikKBpRF5lmhHMt4qiomC5iDAj2I6NsM+LifE48gUbeWpAgumzsqIKM5kZXBoej8dACnKZWyh6W670kuwjY96lp1QhIGv28QjVv1hWO5DXZTNNAx5mApka5WfJFpcgCE7KMM2i0RJU2UdRlKJdCr8bpBBzzH4BcQ8v2mwQrq6N8bdj7e09UElHl15MT8bQOLOGO7wvwGFsXvq+TVh1yQr0c1FydGy0SGM3MoEC9cElNxWhAY6CHuZZKX5VpSVgOUmQlCKtJ5gVEvEJaFTaWsbhgoCBCPf3styrcwiWnHwJKZqjt+ViyCUAcnKkKUEohyyQ5HfymmyKohQLG/kbrugQ4V6kxrlLdqhChSIEBA2WTV7L0QE9PT1IpVIj7HdFPp8/JO8jm/BnjaEClN6JSIzesKATXYvxSllHQ3MVdm/bA4sl5jkXnI3Lb9uEnE/HS93dGOKy1qUBCmPckY2x2kNmaBx4SWMdcmnpWRkaCiZZQEmvT42OoJ6F1nRWbLW6wCg/yxAAFE5YkKolSBMs0pPedoqGSOGq5e5QguDLKhE8VJVhYOjwcwk/rX4aKioruEM8VKwpJFAyHcsldIILtr7ePtB4kjC3yxP0bCwUCnvxB4f4+sBARjOMp5OkezQyCQ9pLtU1T6MEq7Cych/2MRyiQ2OYtXAWrvnwVVh1+Ur0MVT2UIxOcOHisF+KTLHpuUYWPiLjFIdQFIWGAFmmM/oEcvOTKoRFNGhpqQf1hopIZBz0DD1qUKhKMIfbYZL68nqOAEsqV1ZWciVXhSmGiMwYSRrmof74CIAEQa7vl7S1oYGltswkNBg93T0EeJRbj4WnyKSryeyL0vH0vuLE/uCPkO/NiuAPFUVEdr96EJqpQ/cYUBQFEgSb8ReuKUHngXb0Hu2GpqtYumoJbvmHG7F4TRtSXhXbWdXtHxqBKgTCnJhOIAxSUVVEEQABBRrvJ1uGnixQ0OaGK3FuqQ9zPCp3myfRfeIE+gnosWPH0MtCyWfnkSe4J956Cx0HD2KKzxhmswReURmCmZ5CN58EHW8/jl6O3U1G7t67B3v27IkPDg0d13X9WVVVb60KV9XS9ZtJ+Z/Tzkm2PzmFvPKtXZ0JV1X/sb9vxG0/2gsfN0IEDVX4pQyHKdb0vqCOVGwCh147gI4DnTCZEVZsWoFr77gaN3/8GrS0zYRXExiIxbB/ZJQSYFErVOg0XOZ+QXBUoUIa3x6JsrAqYNn06bhgWhVWEYg1IQ+WKHks1W2sDwfwsbXzceMZ07AxXIKbG6qK7erGGlxYX43b5zTiB9z3+2BrPf71A5fimpYwbpozbch13bNcxzmfBl9KMX2IbInQhP/yLAIgezgF5+euohzat/sod1MVmD4PLyv0HV9YiBQyWeRJSZ9PRXJyHDt+9QqOkhWpVA41DXW49NZNuP1fPohFa5bAKvNhJzc0DnA/L0lhk3eRjNBUgQSLKxUOXIbMIJ/pVeoGzqurweLyUrQyq8xnCNZqKsCR66lBZQyTUu4nVJaH4OHCystNjcrp9WguC2A6dWTt/GasWzgDTR6l7qsXnpUFEGVz2U7rFKd6PdA7Pqyb/rui0YT7ym/2wV8SgKqrpLAL+U9R+JdCl2dOh1NA0CeQHB3G3pdfx2Pf/3d0Hevjb/xYuel8XPfhzbjm9s0onVmH/Sx7e7mxYrsWvIaJAlOOQSCCTJ+SEfGpKUyw9rcKeRgcSWeT5h850EvACwA/uARDniBwLDfhYyhohsat9zT2vLiTDqiGjP1samr9KXtO9/X3AMgf3Nc+8JwwjH/tbB+ydr1+DCYHkgPLCs91FQjBxkqOrIa8BubzUo+Gppog3vjNa/jhV3+MPa/sp1ilUUO6brplI6790BWYOXc6xvmoeyAVh+BzAr8QMKiTsgrUNJ1Ae6AbXmiaCXYAywlk+Ditv3MEoNpnOY5w+RVAPFx4CMTIZJKVpIN9Ow6grDrM37iYSmU3scvbOv8IAPlLO619TtG05w/s68CBA93w+D3Fet7iYshlzpeACAkEm6IoYKyhwDxbXRlEU20Ikc5uPPOjZ/Do/T/DyMAops+qxyU3bMB7LlnFpXYAOgR8zNkmae7RdUg2GLyXqghQvCBrkSmKJHh4CZKWdyD7KgROuC5kX69bQCc3W+T1sN/EUGcflpy7CIplbbh73bJq/vS0zz8B4IGhobRdpv8dhPjpgX1d1t69XZB2W4zlPFdaNifkyAtyCAKgyDtwYi4nzSiB36NjRn0FynTg2Ue24JePb8UwgaidFsaFl67G4rPmYYphMMjSWhUKPGSAqarQVcEsAgjeM0t90Hm9LOBHNR3gNXWoZIDMLgEyUBDw6FQWpX4DC6kNx9/sxHnrlsLj8xhWZOxLeBuHnP6fdH/gjaG0ayq3qabnsfb2Qby84y3ussqaPoccl7sWCyObJW4RGU6MJ1wJCoFwWEnK9wG/iRaKmMpN1uef3IY3mD38LI/PWDwH69Yvg0sBG2BKNGiQhzQ3iyCofEJkQeP7MDORQqA0oRTBEby/VwiEDA0prjcEbJSQQWWKhszAOAuvHBpmTgMLrkvvXjG39k+M+k8u/FkAZN/vvBWZ+lb78E3QjE8k0/nx1/d0oas3ggT3BDNEP8fqLs9NT5vrcGkw58pwcH7fJEuIB7z0XuvMMLJcVW79+TbEmFJrmfrWXXweAmVB9LJ8lizy0jBD1ZCgdzWyoaE8CI3IavzSYNz5CUqZYcBDgCdYEKkELkQhLbBPJcf47bOvonlWHYRw/W4yv0zacDpN/IVO7rc7Rr7qKTXmkvkvHzsx6r62rxtdfPyUTqTJBrJCboWRDTZp67Dic5gyHYaDfG/zs83PCgepqQphxrQQ9v52L1eJg6iurcCqDcsguFkxSCZ4yQiyHxaR9JsGfIoKyQov9aJEN1BhmghoKhwu2yPMRBoBCPDhisWxJDCH97TznpVgLaDZVmExTvP4SwDI27hffWNoPFeibhSq/r6C5e483hNxXj/QQ0aMcf8uRRHMwSpYJ73PCUmji43scAiCxVfQMFNXsWh2LUY6e9Dd0YuGxiqsv+Q86KaKMXo1xaqTjEddKAiTng7R45UeE2WGDk8RHQspMmSC9YjUCI/u4TNGuwiUYPqU4Os6OSPQJid+Ou10ACjeR+rCfZ2jD6bdyFotUHJxpmC39wxO4MDRIbR3R5AhExxynidtdeEwZuWEbL66BMWhQZwjlV7DzMYK9Ld34xC3yJdQFC+7dj0muQCb5CZsha5R2CpQwtgu1U0EGBY62QAosHivY7EYaa6gpqKca4gMMgRYjuVVVaQTGTQ01UIVShNO8zhtAE7d7+EeZL99pOd5T7Vnsa0Ym/OO+/R4PJM61DGCjr5xyGd1KKLg0l63WC9InXAIgryH0AR0enReSw3G+QS6p70PM1vq0HZWazHFNXHHx8fA9gq1qPysvVBgGOX5+zRZ1scdJ+EqaKyoQEKGIUMvz+99qgapS3XTq+T963GahzjNfn/S7es7BzLfPTH81HdORK50W0oq8lAfHotO4TCBONYTgcVJnfyRSzxONkVRoKqiyAKTIMxoqsQLz/wWST5b2HTNOkzj88I0LdbobU1RAYcnDbd4zaLORBj/vBN81IM0xZhLW4LjQq5CVcaOZJrXa7J2EiGc5vFXA/CH9//Wrzpz3+kYucUxvWSF+uOxWMo91DmMSXroZD9OW7KCnBCcqFBVaATANAwsWdyIV7buhnzm+N6r18Hi913xGKiJ0AQjm79zCKZNIMaLu00OKvw+rv0TDDMQKhcqgU1we95D4wvMTJqundprx186/iYAnBrke+2DB77XE7nJKC15TzJbiB3sGkMskWVxI4pxKzUCnLJkgaqpBEGD32+iutKLw2+2o6quAms3noM+ZoVYIQdDhgtBEPwNNRSjfFbh8r3MCJIRAoCuCGqDg6xjo5TV6ODAMK+6ffxzWqc4rV5vs9O3D/b+xtX0ja5Q2o8wZY7HU+C85QmQBfKNSuM0Q4Xga7DEhwgnfoTL7AXnzMeydW04yu22OPucwjwAAARbSURBVHepPZpWLIWnuM8vqV7JylCuI6TXDSFgqILAZNA4ux7eEj9Ghya41+i2c6DTOsVp9forOn2/a+w1x5xYmrfcvkNdo0gkczSdoUAlZ64GSFtVhgKZoNKImbOqMUJRjMcyWH7xeZh/9mwcjE5ilDtPfgI1zkdrJvstKC2Dy+cPPpbKXmYM+aA2QrHYdOOF3EgZlOsWN53J78FpHu8YAHL8B48jCV293bFdWwpjgQsqm2lLipVLIADlZHiQxgqAupoQDu/Zj8nJNNZcvgobrlqFEW6V7+MGSoIZQBZEVRTAgKnB5uKol4/VevkIbMPVa2AzG+zhjlYqU8jnFWUPb3da5zsKgJzBD7vHn1UM4yMT8bR9mMvbAg2xCYLDmHVlYLMTmQyF4qeqCmqqgmjfdwAxgtB65lzc8olr0LRkFjymAaGqeJVPpF8fG8ehWBz+5mrc9g/XQy69H3/ol+jpHUE6bydss2onb3ta5zsOgJxFLD/2kFDFlqFIEqPjCRTyBVLVpoq78utikwyQb2zuGJWWetHx5gHs23kQST6PXHfZCrzvk9fjils34oJr12Ljjetx40evwsXXrkNnRx+2PPE8xdBGlo/vLFX99Nd37szIe51Oe1cAeJJPxRWfeYcDN3agfZh5P8Pdnhwspi6Z3lymulNQKFQKhbtHQb8ON5vE049ySf3UNm57jyFUUYK65hqU15QhwrB4jF7/5ZMvwqc6ONYxBFdxD99/bPCB0zH8VJ93BQA52A+Oj3YLw7s5W3ASew8PYHIiWcz9RTbYJ8VR9gMkBGAhZUPhdvvcWTUwuQX35m93Y8vjz+EXjzyLZx55Bnu37USJsLBodjU6B7jJytByVPENvM3jXQNAzuuHJ0Z/owrtvmgibe8nExJcGmeTaeS4DihQIKU+WNQHmeNls7mIkiwxNAUVpX6EywOoDPlQwVbKFgyYSKTy6OqPuraqb5/sHH9IjvN22rsKACfm2iL4OUUzvjw6kcrvPjSAsZFJJCbiSHE1KP9vQYYbLvI1x92nk+ywqfBsLIVtlsQyXFQh4PXqGKFQ7tzfDVWIVww1dOmTgM0x3tb5bgOAh3t6sj190c+wXP3iRCKb3L6/Fx2sGCPDE4iNxzHFxU46mUGOZW+eK0zJBItMkMYz3cPQVWhsx3uj2H2kn8EhjnoCpTc+cOJE/G1Z/rvO7zoActyXAWt6z8S9imFutmz32FtcPO1+a5ALqWEMD08iyYVOiuuILFlgMbZdrgOEUOheF938/jV6Xe5OqZr+aNbrXXnfUT6/lzf+K9r/CABynvcAzoPdY1sVvaxNMTyfncoWjveMJNKvHx1yt/OZwP6OYRzjFlx7/ziOdI9hx8E+vLi7U77Px1P5o4rHd9NDfdGbHmsfGpf3+2vb/xgApyYsQ4JA/JPt8a5Udf29Qtf+0VHEr6PpfN9gNJXrHUk4wxPc6shZbyqafh8U9TLVMNf8oGvkx/Ie/932/wEAAP//zJOvOwAAAAZJREFUAwAot6t+6bs9MwAAAABJRU5ErkJggg==">
 <style>
   /* ============================================================
      DESIGN SYSTEM
@@ -120,6 +124,8 @@
     color:var(--text); display:flex; align-items:center; gap:8px; user-select:none;
   }
   .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec-glow)}
+  .brand .logo{width:20px;height:20px;flex:none;display:block;
+    filter:drop-shadow(0 1px 3px rgba(0,0,0,.55))}
   .tb-group{display:flex; align-items:center; gap:4px}
   .tb-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--text-faint);margin-right:2px}
   .tb-sep{width:1px;height:22px;background:var(--line);margin:0 4px}
@@ -437,7 +443,7 @@
 
   <!-- TOPBAR -->
   <header class="topbar">
-    <div class="brand"><span class="dot"></span>MEATCORD</div>
+    <div class="brand"><img class="logo" id="brand-logo" alt="" width="20" height="20">MEATCORD</div>
     <div class="tb-sep"></div>
 
     <div class="tb-group">
@@ -788,6 +794,8 @@
       <span class="who">Clip <b id="ed-clip-n">1</b> of <b id="ed-clip-total">1</b></span>
       <button class="ed-btn" id="ed-move-l" title="Move clip earlier">◀ Move</button>
       <button class="ed-btn" id="ed-move-r" title="Move clip later">Move ▶</button>
+      <button class="ed-btn" id="ed-autotrim" title="Cut the silence off both ends of this clip">✂ Trim silence</button>
+      <button class="ed-btn" id="ed-autotrim-all" title="Cut the silence off every clip in the timeline">Trim all</button>
       <button class="ed-btn" id="ed-split">✂ Split here</button>
       <button class="ed-btn danger" id="ed-delete">Delete clip</button>
       <span class="range" id="ed-range">0.00 – 0.00s</span>
@@ -4676,6 +4684,89 @@ function drawWaveform(i){
   });
 }
 
+/* ============================================================
+   AUTO-TRIM  — cut the silence off both ends of a take.
+
+   Reuses the peak envelope computeWave() already builds for the trim display,
+   so there is nothing extra to decode: find where sound first and last rises
+   above the room's own noise floor, and move the handles there.
+
+   Two decisions make this feel right rather than clever:
+
+   - The threshold is derived from THIS take's noise floor (the quiet fifth of
+     the envelope), not a fixed number. A fixed threshold works in one room and
+     fails in the next.
+   - It only ever TIGHTENS. If you've already trimmed closer than the detector
+     would, your edit stands. Running it twice does nothing the second time,
+     and it can never undo careful work by loosening a handle.
+   ============================================================ */
+const AT_LEAD = 0.08;      // keep a breath before the first word
+const AT_TAIL = 0.12;      // ...and let the last one decay
+async function autoTrimClip(i){
+  const clip = S.clips[i];
+  if (!clip) return { ok:false, why:'gone' };
+  const env = await computeWave(i);
+  if (!env || !env.length) return { ok:false, why:'no audio to read' };
+
+  const N = env.length, dur = clip.duration || 1;
+  const at = k => (k / N) * dur;
+
+  // noise floor = the quiet fifth of the take; threshold sits well above it
+  const sorted = Float32Array.from(env).sort();
+  const floor = sorted[Math.floor(N * 0.2)] || 0;
+  const thr = clamp(Math.max(floor * 4, 0.05), 0.03, 0.30);
+
+  // require ~50ms of sustained sound so a chair creak or lip smack can't
+  // masquerade as the start of a sentence
+  const sustain = Math.max(3, Math.round((N / dur) * 0.05));
+
+  let first = -1, run = 0;
+  for (let k = 0; k < N; k++){
+    if (env[k] > thr){ if (++run >= sustain){ first = k - run + 1; break; } } else run = 0;
+  }
+  let last = -1; run = 0;
+  for (let k = N - 1; k >= 0; k--){
+    if (env[k] > thr){ if (++run >= sustain){ last = k + run - 1; break; } } else run = 0;
+  }
+  if (first < 0 || last < 0 || last <= first) return { ok:false, why:'nothing above the noise floor' };
+
+  let ns = Math.max(0, at(first) - AT_LEAD);
+  let ne = Math.min(dur, at(last) + AT_TAIL);
+  ns = Math.max(ns, clip.trimStart);        // tighten only, never loosen
+  ne = Math.min(ne, clip.trimEnd);
+  if (ne - ns < 0.15) return { ok:false, why:'would leave nothing' };
+
+  const cutS = ns - clip.trimStart, cutE = clip.trimEnd - ne;
+  if (cutS < 0.02 && cutE < 0.02) return { ok:true, cutS:0, cutE:0, already:true };
+  clip.trimStart = ns; clip.trimEnd = ne;
+  return { ok:true, cutS, cutE };
+}
+
+/* Apply to the open clip, or to every clip in the timeline. */
+async function autoTrim(all){
+  if (!S.clips.length) return;
+  const idxs = all ? S.clips.map((_,i)=>i) : [pvIndex];
+  let trimmed = 0, saved = 0, skipped = 0;
+  for (const i of idxs){
+    const r = await autoTrimClip(i);
+    if (!r.ok){ skipped++; continue; }
+    if (r.already) continue;
+    trimmed++; saved += r.cutS + r.cutE;
+  }
+  // the playhead may now sit outside the new window
+  const c = S.clips[pvIndex];
+  if (c){
+    if (pvVid.currentTime < c.trimStart) pvVid.currentTime = c.trimStart;
+    if (pvVid.currentTime > c.trimEnd)   pvVid.currentTime = c.trimEnd;
+  }
+  syncClipUI(); rebuildOffsets(); rebuildScrubMarks(); drawWaveform(pvIndex);
+  lastTimelineCount = -1; rebuildTimeline(); saveDraftNow();
+
+  if (!trimmed && skipped) toast('Nothing to trim \u2014 '+(skipped>1?skipped+' clips have':'this clip has')+' no clear speech to find.', true);
+  else if (!trimmed)       toast('Already tight \u2014 no dead air found.');
+  else toast('Trimmed '+saved.toFixed(1)+'s of dead air off '+trimmed+' clip'+(trimmed>1?'s':'')+'.');
+}
+
 /* ---- trim handle drag ---- */
 // The move/up listeners are bound only for the duration of a drag. A permanent
 // window-level pointermove fires for every mouse movement anywhere in the app —
@@ -6444,6 +6535,8 @@ $('ed-restart').addEventListener('click', () => { loadClip(0,false); const c=S.c
 $('ed-move-l').addEventListener('click', () => moveClip(-1));
 $('ed-move-r').addEventListener('click', () => moveClip(1));
 $('ed-delete').addEventListener('click', deleteClip);
+$('ed-autotrim').addEventListener('click', () => autoTrim(false));
+$('ed-autotrim-all').addEventListener('click', () => autoTrim(true));
 $('ed-split').addEventListener('click', splitClip);
 $('speed-row').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return;
   const clip=S.clips[pvIndex]; clip.speed=parseFloat(b.dataset.spd); pvVid.playbackRate=clip.speed;
@@ -6459,6 +6552,7 @@ window.addEventListener('keydown', e => {
     if (e.key==='ArrowLeft'){ e.preventDefault(); loadClip(pvIndex-1,false); }
     else if (e.key==='ArrowRight'){ e.preventDefault(); loadClip(pvIndex+1,false); }
     else if (e.code==='Space'){ e.preventDefault(); edPlayPause(); }
+    else if (e.key==='t' || e.key==='T'){ e.preventDefault(); autoTrim(e.shiftKey); }
     return;
   }
   if (e.code==='Space'){ e.preventDefault(); toggleRecording(); }
@@ -6470,6 +6564,14 @@ window.addEventListener('keydown', e => {
 /* ============================================================
    BOOT
    ============================================================ */
+/* Reuse the favicon's data URI for the topbar mark. Inlining the image twice
+   would add another ~12KB to a file that ships as a single download. */
+(() => {
+  const link = document.querySelector('link[rel="icon"]');
+  const logo = $('brand-logo');
+  if (link && logo) logo.src = link.href;
+})();
+
 applyOutputDims();
 rebuildFilters();
 updateImpPlayBtn();
@@ -6503,6 +6605,7 @@ window.__meatcord = {
   hwStartRecording, hwCaptureFrame, hwStopRecording, ensureAudio,
   get profile(){ return Object.assign({ measuredFps }, profAvg); },
   addClip, loadDraft, startNewDraft, draftAll, draftGet, saveDraftNow, renderDraftList,
+  autoTrimClip, autoTrim,
   linkProjectFolder, fsListDrafts, deleteDraft, get fsDir(){ return fsDir; }, set fsDir(d){ fsDir = d; },
 };
 

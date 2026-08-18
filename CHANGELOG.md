@@ -6,6 +6,28 @@ Landed on `main` but not in a release yet.
 
 ### Added
 
+- **Auto-trim dead air.** One button cuts the silence off the head and tail of a
+  take — `Trim silence` for the open clip, `Trim all` for the timeline, or `T`
+  and `Shift+T`. It reuses the peak envelope the trim display already builds, so
+  nothing extra is decoded.
+
+  The threshold is derived from *that take's* noise floor (the quiet fifth of the
+  envelope) rather than a fixed number, so it works in a treated room and a room
+  with a fan running. Onsets must sustain ~50ms, which stops a chair creak or lip
+  smack passing for the start of a sentence. It keeps 80ms before the first word
+  and 120ms after the last so nothing is clipped.
+
+  It only ever **tightens**: if you have already trimmed closer than the detector
+  would, your edit stands, and running it twice does nothing the second time.
+  Measured against synthetic takes with known silence — clean room, noisy room,
+  quiet talker, a creak before speech, speech starting at 0.00s — every case
+  landed within 0.00s of the expected cut.
+
+- **App icon and logo.** The steak-and-lens mark is now the browser tab icon and
+  sits in the topbar. Inlined as a data URI to keep the app a single file, stored
+  once — the topbar reads its source back off the favicon rather than embedding a
+  second copy.
+
 - **Swap media and camera in PiP.** A button in the PiP panel flips which source
   is the backdrop and which sits in the box, so the same layout gives you either
   "clip behind, face in the corner" or "face behind, clip in the corner". With
